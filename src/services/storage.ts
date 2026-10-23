@@ -91,9 +91,24 @@ export function validateAndSanitizeState(raw: unknown): HouseholdState {
   };
 }
 
+const getStorage = (): Storage | null => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) return window.localStorage;
+    if (typeof globalThis !== 'undefined' && (globalThis as any).localStorage) return (globalThis as any).localStorage;
+    if (typeof localStorage !== 'undefined') return localStorage;
+  } catch {
+    return null;
+  }
+  return null;
+};
+
 export function loadStateFromStorage(): HouseholdState {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const storage = getStorage();
+    if (!storage) {
+      return createInitialSeedState();
+    }
+    const raw = storage.getItem(STORAGE_KEY);
     if (!raw) {
       const initial = createInitialSeedState();
       saveStateToStorage(initial);
@@ -112,7 +127,10 @@ export function loadStateFromStorage(): HouseholdState {
 
 export function saveStateToStorage(state: HouseholdState): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const storage = getStorage();
+    if (storage) {
+      storage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
   } catch (err) {
     console.error('Failed to save state to localStorage:', err);
   }

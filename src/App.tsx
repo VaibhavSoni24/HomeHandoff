@@ -50,14 +50,16 @@ export const App: React.FC = () => {
   }, []);
 
   const stateRef = useRef(state);
+  const isProcessingRef = useRef(false);
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
   // Handle conversational query with state race protection and error recovery
   const handleSendMessage = (query: string) => {
-    if (!query.trim() || isProcessing) return;
+    if (!query.trim() || isProcessingRef.current) return;
 
+    isProcessingRef.current = true;
     setIsProcessing(true);
 
     // Simulate realistic processing latency for asynchronous tool orchestration
@@ -88,6 +90,7 @@ export const App: React.FC = () => {
           chatHistory: [...prev.chatHistory, errorMsg]
         }));
       } finally {
+        isProcessingRef.current = false;
         setIsProcessing(false);
       }
     }, 280);

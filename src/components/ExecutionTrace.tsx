@@ -68,10 +68,13 @@ export const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ toolHistory }) =
         textarea.style.position = 'fixed';
         textarea.style.opacity = '0';
         document.body.appendChild(textarea);
-        textarea.focus();
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
+        try {
+          textarea.focus();
+          textarea.select();
+          document.execCommand('copy');
+        } finally {
+          document.body.removeChild(textarea);
+        }
       }
       setCopiedId(tool.id);
       setTimeout(() => setCopiedId(null), 2000);
@@ -87,7 +90,7 @@ export const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ toolHistory }) =
     ? Math.round(toolHistory.reduce((acc, t) => acc + t.executionTimeMs, 0) / totalCalls) 
     : 0;
   const successCount = toolHistory.filter(t => t.status === 'success').length;
-  const successRate = totalCalls > 0 ? Math.round((successCount / totalCalls) * 100) : 100;
+  const successRate = totalCalls > 0 ? Math.round((successCount / totalCalls) * 100) : 0;
 
   return (
     <div className="module-panel surface-card">
@@ -110,8 +113,12 @@ export const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ toolHistory }) =
             <span className="stat-desc">Avg. Sim. Latency</span>
           </div>
           <div className="trace-stat-box">
-            <span className="stat-value text-emerald">{successRate}%</span>
-            <span className="stat-desc">State Success ({successCount}/{totalCalls})</span>
+            <span className={`stat-value ${totalCalls > 0 ? 'text-emerald' : 'text-muted'}`}>
+              {totalCalls > 0 ? `${successRate}%` : '—'}
+            </span>
+            <span className="stat-desc">
+              {totalCalls > 0 ? `State Success (${successCount}/${totalCalls})` : 'No executions yet'}
+            </span>
           </div>
         </div>
       </div>
@@ -166,7 +173,9 @@ export const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ toolHistory }) =
                     <span className="step-tag">Step #{stepNumber}</span>
                     <span className="tool-code-tag">{tool.toolName}</span>
                     <span className={`status-pill ${tool.status}`}>
-                      <CheckCircle2 size={12} />
+                      {tool.status === 'success' && <CheckCircle2 size={12} />}
+                      {tool.status === 'failed' && <AlertCircle size={12} />}
+                      {tool.status === 'executing' && <Clock size={12} />}
                       {tool.status.toUpperCase()}
                     </span>
                   </div>

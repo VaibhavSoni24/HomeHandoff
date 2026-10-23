@@ -49,7 +49,7 @@ HomeHandoff includes interactive one-click scenario chips in the Alexa+ conversa
   - `calendar.createEvent`: Blocks "Parents Weekend Visit" (Friday 6:00 PM – Sunday 3:00 PM).
   - `tasks.batchCreate`: Generates 5 prioritized tasks with assigned family members (bedroom cleaning, bathroom restock, grocery run, entryway tidy, Wi-Fi card setup).
   - `shopping.addItems`: Adds 5 parent-favorite items (artisan sourdough, organic milk, dark roast coffee, chamomile tea, plush bath towels).
-  - `routines.scheduleSmartHomeRoutine`: Arms "Parents Arrival Welcome Routine" (pre-cools house to 71°F, sets warm porch lights, generates guest keypad PIN 8492).
+  - `routines.scheduleSmartHomeRoutine`: Arms "Parents Arrival Welcome Routine" (pre-cools house to 71°F, sets warm porch lights, and arms simulated guest pass placeholder `SIMULATED-CODE-NOT-ISSUED`; no physical lock contacted).
 - **Result:** Generates an active plan, calculates preparation milestones, and sets initial readiness score.
 
 ### 2. Scenario 2: Dynamic Timeline & Buffer Rescheduling
@@ -118,7 +118,7 @@ flowchart TD
 - **Bundler & Dev Server:** Vite 8
 - **Styling:** Vanilla CSS with restrained professional design tokens, warm neutral background (`#f8fafc`), white surfaces, dark slate typography, and ocean/slate blue accent (`#0284c7`). Fully responsive down to ~390px mobile viewports.
 - **Icons:** Lucide React (used deliberately and sparingly)
-- **Testing:** Vitest automated unit testing suite (25 tests)
+- **Testing:** Vitest automated unit testing suite (39 tests)
 - **Linter:** Oxlint (zero errors, zero warnings)
 - **Voice Output:** Native browser Web Speech API (`SpeechSynthesis`)
 
@@ -167,8 +167,8 @@ npm run lint
 
 ## 🧪 Automated Test Suite
 
-HomeHandoff includes 25 automated unit and regression tests across 4 test suites:
-- **`src/test/agentEngine.test.ts` (9 tests)**:
+HomeHandoff includes 39 automated unit and regression tests across 4 test suites:
+- **`src/test/agentEngine.test.ts` (17 tests)**:
   - **Scenario 1:** Verifies autonomous execution of 4 tools (`calendar.createEvent`, `tasks.batchCreate`, `shopping.addItems`, `routines.scheduleSmartHomeRoutine`), ensuring created entities are committed to the state store.
   - **Scenario 2:** Verifies context retention, event shifting to Saturday 5:00 PM, task deadline recalibration, and routine trigger updating to Saturday 3:30 PM.
   - **Scenario 3:** Verifies dynamic readiness calculation (0% initial, 40% after marking tasks completed, accurate incomplete task enumeration).
@@ -177,10 +177,21 @@ HomeHandoff includes 25 automated unit and regression tests across 4 test suites
   - **Missing Plan & Fallbacks:** Graceful responses without crashing when no plan is active or for unrelated queries.
   - **Rapid State Updates:** Validates state consistency during sequential operations and tool tracking.
   - **Complete Pipeline:** Verifies end-to-end parents-visit → task completion → reschedule → readiness inspection.
-- **`src/test/dateUtils.test.ts` (9 tests)**:
+  - **No Hardcoded PIN:** Confirms literal PIN 8492 never appears in state or tool traces, and verifies presence of placeholder `SIMULATED-CODE-NOT-ISSUED` and no-lock disclosure.
+  - **Explicit Date Reschedule:** Verifies moving visit to explicit calendar date (e.g., November 14, 2026 at 5 PM), preserving event duration and pre-arrival buffers.
+  - **Data Preservation:** Verifies completed tasks and unrelated household events/chores remain intact during explicit-date rescheduling.
+  - **Impossible Date Rejection:** Rejects impossible dates (e.g., February 31) without crashing or JavaScript date rollover.
+  - **Ambiguity & Past Dates:** Handles ambiguous reschedule requests and dates in the past with helpful clarifications.
+  - **Natural Language Tasks (`ADD_TASK`):** Validates conversational task creation with assignees and priorities.
+  - **Natural Language Calendar (`CREATE_CALENDAR_EVENT`):** Validates calendar event scheduling with date/time extraction.
+  - **Demo Reset:** Tests clean reset of state and execution trace after all 3 guided scenarios.
+- **`src/test/dateUtils.test.ts` (15 tests)**:
   - Tests `getUpcomingDayOfWeek` for same-day future vs. past hour/minute boundaries, tomorrow vs. next week, and date formatting.
   - Tests `getRescheduledDateForPlan` to ensure visit dates never skip an extra week.
-  - Tests `parseExplicitDate` for ISO and human-readable dates.
+  - Tests `parseExplicitDate` for ISO, month-day, and day-month formats.
+  - Tests strict calendar validation rejecting impossible dates (Feb 31, April 31, non-leap year Feb 29) while accepting leap year Feb 29.
+  - Tests 12-hour and 24-hour time component extraction.
+  - Tests `findNextUpcomingEvent` deterministic calculation (empty, past-only, in-progress event, and nearest upcoming).
 - **`src/test/readiness.test.ts` (3 tests)**:
   - Tests single-source-of-truth `computePlanReadiness` metrics across active plan and global state.
 - **`src/test/storage.test.ts` (4 tests)**:

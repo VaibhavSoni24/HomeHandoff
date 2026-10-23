@@ -82,6 +82,7 @@ export type ToolName =
   | 'calendar.createEvent'
   | 'calendar.updateEvent'
   | 'tasks.batchCreate'
+  | 'tasks.createTask'
   | 'tasks.rescheduleAssociated'
   | 'tasks.toggleComplete'
   | 'shopping.addItems'

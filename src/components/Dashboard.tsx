@@ -10,7 +10,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import type { HouseholdState } from '../types/household';
-import { formatDateTime, getRelativeTimeLabel } from '../utils/dateUtils';
+import { formatDateTime, getRelativeTimeLabel, findNextUpcomingEvent } from '../utils/dateUtils';
 import { computePlanReadiness } from '../utils/readiness';
 
 interface DashboardProps {
@@ -34,12 +34,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const unpurchasedShopping = state.shoppingItems.filter(s => !s.completed).length;
   const scheduledRoutines = state.routines.filter(r => r.enabled).length;
 
-  const nextEvent = React.useMemo(() => {
-    if (state.events.length === 0) return undefined;
-    const sorted = [...state.events].sort(
-      (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime()
-    );
-    return sorted[0];
+  const nextEventResult = React.useMemo(() => {
+    return findNextUpcomingEvent(state.events);
   }, [state.events]);
 
   // Urgent pending tasks
@@ -144,17 +140,28 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <span className="metric-icon-box"><Calendar size={16} /></span>
           </div>
           <div className="metric-card-body">
-            {nextEvent ? (
+            {nextEventResult ? (
               <>
-                <div className="metric-main-value">{nextEvent.title}</div>
+                <div className="metric-main-value">
+                  {nextEventResult.event.title}
+                  {nextEventResult.isInProgress && (
+                    <span className="badge badge-accent" style={{ marginLeft: 6, fontSize: '0.72rem', verticalAlign: 'middle' }}>
+                      In Progress
+                    </span>
+                  )}
+                </div>
                 <div className="metric-subtext">
-                  {formatDateTime(nextEvent.start)} ({getRelativeTimeLabel(nextEvent.start)})
+                  {nextEventResult.isInProgress ? (
+                    <span>Happening now (ends {formatDateTime(nextEventResult.event.end)})</span>
+                  ) : (
+                    <span>{formatDateTime(nextEventResult.event.start)} ({getRelativeTimeLabel(nextEventResult.event.start)})</span>
+                  )}
                 </div>
               </>
             ) : (
               <>
-                <div className="metric-main-value">No Events</div>
-                <div className="metric-subtext">Calendar is clear</div>
+                <div className="metric-main-value">No Upcoming Events</div>
+                <div className="metric-subtext">All scheduled events are completed</div>
               </>
             )}
           </div>

@@ -120,4 +120,100 @@ describe('dateUtils: getUpcomingDayOfWeek & formatting', () => {
 
     expect(parseExplicitDate('what is the weather today')).toBeNull();
   });
+
+  it('strictly validates calendar dates and rejects impossible dates without JS rollover', () => {
+    // February 31 does not exist in any calendar
+    expect(parseExplicitDate('Move the visit to February 31, 2026 at 5 PM')).toBeNull();
+    expect(parseExplicitDate('2026-02-31')).toBeNull();
+    expect(parseExplicitDate('April 31, 2026 at 5 PM')).toBeNull(); // April only has 30 days
+    expect(parseExplicitDate('June 31, 2026')).toBeNull(); // June only has 30 days
+
+    // Non-leap year Feb 29
+    expect(parseExplicitDate('February 29, 2025 at 5 PM')).toBeNull();
+    // Leap year Feb 29
+    const leapDate = parseExplicitDate('February 29, 2024 at 5 PM');
+    expect(leapDate).not.toBeNull();
+    expect(leapDate?.getFullYear()).toBe(2024);
+    expect(leapDate?.getMonth()).toBe(1);
+    expect(leapDate?.getDate()).toBe(29);
+  });
+
+  it('extracts explicit time components accurately', () => {
+    const with12h = parseExplicitDate('Move the visit to November 14, 2026 at 5 PM');
+    expect(with12h?.getHours()).toBe(17);
+    expect(with12h?.getMinutes()).toBe(0);
+
+    const withMinute = parseExplicitDate('Move the visit to November 14, 2026 at 5:30 PM');
+    expect(withMinute?.getHours()).toBe(17);
+    expect(withMinute?.getMinutes()).toBe(30);
+
+    const withMorning = parseExplicitDate('November 14, 2026 at 10:15 AM');
+    expect(withMorning?.getHours()).toBe(10);
+    expect(withMorning?.getMinutes()).toBe(15);
+
+    const with24h = parseExplicitDate('2026-11-14 at 16:45');
+    expect(with24h?.getHours()).toBe(16);
+    expect(with24h?.getMinutes()).toBe(45);
+  });
+});
+
+import type { CalendarEvent } from '../types/household';
+import { findNextUpcomingEvent } from '../utils/dateUtils';
+
+describe('dateUtils: findNextUpcomingEvent deterministic calculation', () => {
+  const refTime = new Date('2026-11-14T12:00:00.000Z');
+
+  const pastEvent: CalendarEvent = {
+    id: 'evt-past',
+    title: 'Morning Yoga',
+    start: '2026-11-14T08:00:00.000Z',
+    end: '2026-11-14T09:00:00.000Z',
+    type: 'routine'
+  };
+
+  const inProgressEvent: CalendarEvent = {
+    id: 'evt-in-progress',
+    title: 'Family Lunch',
+    start: '2026-11-14T11:30:00.000Z',
+    end: '2026-11-14T13:00:00.000Z',
+    type: 'family'
+  };
+
+  const nearFutureEvent: CalendarEvent = {
+    id: 'evt-near-future',
+    title: 'Parents Arrival',
+    start: '2026-11-14T17:00:00.000Z',
+    end: '2026-11-16T15:00:00.000Z',
+    type: 'visitor'
+  };
+
+  const farFutureEvent: CalendarEvent = {
+    id: 'evt-far-future',
+    title: 'HVAC Inspection',
+    start: '2026-11-20T10:00:00.000Z',
+    end: '2026-11-20T11:00:00.000Z',
+    type: 'routine'
+  };
+
+  it('returns null when event list is empty', () => {
+    expect(findNextUpcomingEvent([], refTime)).toBeNull();
+  });
+
+  it('returns null when all events have already ended', () => {
+    expect(findNextUpcomingEvent([pastEvent], refTime)).toBeNull();
+  });
+
+  it('detects and flags an in-progress event correctly', () => {
+    const result = findNextUpcomingEvent([pastEvent, inProgressEvent, nearFutureEvent], refTime);
+    expect(result).not.toBeNull();
+    expect(result?.event.id).toBe('evt-in-progress');
+    expect(result?.isInProgress).toBe(true);
+  });
+
+  it('selects the earliest upcoming event when no event is currently in progress', () => {
+    const result = findNextUpcomingEvent([pastEvent, farFutureEvent, nearFutureEvent], refTime);
+    expect(result).not.toBeNull();
+    expect(result?.event.id).toBe('evt-near-future');
+    expect(result?.isInProgress).toBe(false);
+  });
 });

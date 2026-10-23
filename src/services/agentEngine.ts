@@ -9,7 +9,15 @@ import type {
   ChatMessage,
   PlanSummary
 } from '../types/household';
-import { getUpcomingDayOfWeek, getRescheduledDateForPlan, formatDateTime, formatDateShort } from '../utils/dateUtils';
+import { 
+  getUpcomingDayOfWeek, 
+  getRescheduledDateForPlan, 
+  parseExplicitDate,
+  detectImpossibleDate,
+  formatDateTime, 
+  formatDateShort,
+  formatTimeOnly
+} from '../utils/dateUtils';
 import { computePlanReadiness } from '../utils/readiness';
 
 export interface AgentExecutionResult {
@@ -33,7 +41,19 @@ export type RecognizedIntent =
 export function classifyIntent(query: string, state: HouseholdState): { intent: RecognizedIntent; params: Record<string, any> } {
   const q = query.trim().toLowerCase();
 
-  // 1. Scenario 2: Rescheduling arriving Saturday / 5pm / etc.
+  // 0. Check for impossible calendar date (e.g., Feb 31, April 31)
+  const impossibleCheck = detectImpossibleDate(q);
+  if (impossibleCheck.isImpossible) {
+    return {
+      intent: 'SCENARIO_2_RESCHEDULE_SATURDAY',
+      params: {
+        isImpossibleDate: true,
+        invalidDateDesc: impossibleCheck.description
+      }
+    };
+  }
+
+  // 1. Scenario 2: Rescheduling arriving Saturday / explicit date / etc.
   const hasRescheduleVerb = 
     q.includes('actually') || 
     q.includes('reschedule') || 
@@ -41,8 +61,11 @@ export function classifyIntent(query: string, state: HouseholdState): { intent: 
     q.includes('delay') || 
     q.includes('move to') || 
     q.includes('moved to') ||
+    q.includes('move the visit') ||
+    q.includes('move visit') ||
     q.includes('change to') ||
-    q.includes('change arrival');
+    q.includes('change arrival') ||
+    q.startsWith('move ');
 
   const hasSaturdayTarget = 
     q.includes('saturday') || 
@@ -56,6 +79,7 @@ export function classifyIntent(query: string, state: HouseholdState): { intent: 
     q.includes('arrive') || 
     q.includes('arriving') || 
     q.includes('parents') || 
+    q.includes('visit') ||
     q.includes('coming');
 
   if (
@@ -73,6 +97,31 @@ export function classifyIntent(query: string, state: HouseholdState): { intent: 
         hasActivePlan: !!state.activePlan
       }
     };
+  }
+
+  // Check explicit calendar date for rescheduling (e.g., "Move the visit to November 14, 2026 at 5 PM", "Reschedule arrival to 2026-11-20 at 6 PM")
+  if (hasRescheduleVerb) {
+    const explicitDate = parseExplicitDate(query, new Date(), 17, 0);
+    if (explicitDate) {
+      return {
+        intent: 'SCENARIO_2_RESCHEDULE_SATURDAY',
+        params: {
+          explicitDate: explicitDate.toISOString(),
+          hasActivePlan: !!state.activePlan
+        }
+      };
+    }
+
+    // If reschedule verb was used without Saturday or valid date, flag as ambiguous
+    if (hasArrivalSubject || q.includes('visit') || q.includes('arrival') || q.includes('plan')) {
+      return {
+        intent: 'SCENARIO_2_RESCHEDULE_SATURDAY',
+        params: {
+          isAmbiguous: true,
+          hasActivePlan: !!state.activePlan
+        }
+      };
+    }
   }
 
   // 2. Scenario 3: Query remaining chores, readiness report, or prep status
@@ -136,7 +185,104 @@ export function classifyIntent(query: string, state: HouseholdState): { intent: 
     };
   }
 
-  // 4. Quick utility commands: Add shopping item
+  // 4. Utility command: Add / Create Task
+  const isAddTaskCmd = 
+    q.startsWith('add task') || 
+    q.startsWith('create task') || 
+    q.startsWith('new task') || 
+    q.startsWith('add chore') || 
+    q.startsWith('create chore');
+
+  if (isAddTaskCmd) {
+    let taskBody = query.trim()
+      .replace(/^(add|create|new)\s+(task|chore)[:\s]*/i, '')
+      .trim();
+
+    if (!taskBody) {
+      return {
+        intent: 'ADD_TASK',
+        params: { needsTitle: true }
+      };
+    }
+
+    // Extract optional assignee: e.g. "assigned to Sarah", "for Vaibhav", "by Sarah"
+    let assignee = 'Shared';
+    const assigneeMatch = taskBody.match(/\s+(?:assigned to|for|by)\s+(sarah|vaibhav|guest room)\b/i);
+    if (assigneeMatch) {
+      const rawAssignee = assigneeMatch[1].toLowerCase();
+      if (rawAssignee === 'sarah') assignee = 'Sarah';
+      else if (rawAssignee === 'vaibhav') assignee = 'Vaibhav';
+      else if (rawAssignee.includes('guest')) assignee = 'Guest Room (Parents)';
+      taskBody = taskBody.replace(assigneeMatch[0], '').trim();
+    }
+
+    // Extract optional priority
+    let priority: 'high' | 'medium' | 'low' = 'medium';
+    if (/\b(urgent|high priority|priority high)\b/i.test(taskBody)) {
+      priority = 'high';
+      taskBody = taskBody.replace(/\b(urgent|high priority|priority high)\b/i, '').trim();
+    } else if (/\b(low priority|priority low)\b/i.test(taskBody)) {
+      priority = 'low';
+      taskBody = taskBody.replace(/\b(low priority|priority low)\b/i, '').trim();
+    }
+
+    return {
+      intent: 'ADD_TASK',
+      params: {
+        title: taskBody,
+        assignee,
+        priority
+      }
+    };
+  }
+
+  // 5. Utility command: Create / Schedule Calendar Event
+  const isCreateEventCmd = 
+    q.startsWith('create event') || 
+    q.startsWith('schedule event') || 
+    q.startsWith('add event') || 
+    q.startsWith('book event') ||
+    q.startsWith('create calendar event') ||
+    q.startsWith('schedule calendar event');
+
+  if (isCreateEventCmd) {
+    let eventBody = query.trim()
+      .replace(/^(create|schedule|add|book)\s+(?:calendar\s+)?event[:\s]*/i, '')
+      .trim();
+
+    if (!eventBody) {
+      return {
+        intent: 'CREATE_CALENDAR_EVENT',
+        params: { needsDetails: true }
+      };
+    }
+
+    const parsedEventDate = parseExplicitDate(eventBody, new Date(), 10, 0);
+    if (!parsedEventDate) {
+      return {
+        intent: 'CREATE_CALENDAR_EVENT',
+        params: { needsDetails: true, title: eventBody }
+      };
+    }
+
+    let title = eventBody
+      .replace(/\s+(on|for|at)\s+(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december|\d{4}-\d{1,2}-\d{1,2}).*/i, '')
+      .trim();
+
+    if (!title) {
+      title = 'Household Calendar Event';
+    }
+
+    return {
+      intent: 'CREATE_CALENDAR_EVENT',
+      params: {
+        title,
+        startDate: parsedEventDate.toISOString()
+      }
+    };
+  }
+
+  // 6. Quick utility commands: Add shopping item
   if (q.startsWith('add ') && (q.includes('to shopping') || q.includes('to groceries') || q.includes('to buy') || q.includes('to list'))) {
     const itemName = q
       .replace(/^add\s+/, '')
@@ -190,6 +336,12 @@ export function processUserMessage(rawQuery: string, currentState: HouseholdStat
     case 'ADD_SHOPPING_ITEM':
       return handleAddShoppingItem(stateWithUserMsg, params.itemName || 'Fresh Milk');
 
+    case 'ADD_TASK':
+      return handleAddTask(stateWithUserMsg, params);
+
+    case 'CREATE_CALENDAR_EVENT':
+      return handleCreateCalendarEvent(stateWithUserMsg, params);
+
     default:
       return handleGenericHelp(stateWithUserMsg, trimmed);
   }
@@ -235,7 +387,7 @@ function handleScenario1ParentsVisit(state: HouseholdState): AgentExecutionResul
     output: {
       eventId: calendarEvent.id,
       status: 'created',
-      calendarSync: 'Simulated Alexa Calendar synced with Google Calendar',
+      calendarSync: 'Committed to simulated household calendar (client simulation)',
       simulatedLatencyMs: 42
     },
     status: 'success',
@@ -433,8 +585,8 @@ function handleScenario1ParentsVisit(state: HouseholdState): AgentExecutionResul
       {
         deviceType: 'lock',
         deviceName: 'Schlage Smart Door Lock',
-        actionDescription: 'Generate temporary Guest Access Code (PIN: 8492) active for the weekend',
-        targetState: { guestPinActive: true, pinCode: '8492' }
+        actionDescription: 'Generate temporary simulated guest access pass [SIMULATED-CODE-NOT-ISSUED] (No physical lock contacted)',
+        targetState: { guestPinActive: true, pinCode: 'SIMULATED-CODE-NOT-ISSUED', simulated: true }
       },
       {
         deviceType: 'vacuum',
@@ -449,7 +601,7 @@ function handleScenario1ParentsVisit(state: HouseholdState): AgentExecutionResul
     id: `tool-${Date.now()}-4`,
     timestamp: new Date().toISOString(),
     toolName: 'routines.scheduleSmartHomeRoutine',
-    description: `Scheduled Alexa+ Smart Home Routine: "Parents Arrival Welcome Routine"`,
+    description: `Scheduled Alexa+ Smart Home Routine: "Parents Arrival Welcome Routine" [SIMULATED-CODE-NOT-ISSUED]`,
     input: {
       routineName: newRoutine.name,
       trigger: newRoutine.trigger,
@@ -459,7 +611,8 @@ function handleScenario1ParentsVisit(state: HouseholdState): AgentExecutionResul
     output: {
       routineId: newRoutine.id,
       scheduledTime: routineTriggerTime.toISOString(),
-      service: 'Simulated Alexa Smart Home Skill API',
+      service: 'Simulated Alexa Smart Home Skill API (client simulation — no physical lock contacted)',
+      simulatedAccessPass: 'SIMULATED-CODE-NOT-ISSUED',
       status: 'armed',
       simulatedLatencyMs: 51
     },
@@ -501,7 +654,7 @@ Here is what I've done across your household systems:
 1. 📅 **Calendar:** Blocked off **Parents Weekend Visit** (Friday 6:00 PM – Sunday 3:00 PM).
 2. 📋 **Tasks:** Generated **5 preparation tasks** distributed between Sarah (bedroom cleaning & entryway tidy) and Vaibhav (bathroom restock, grocery run & smart setup).
 3. 🛒 **Shopping:** Synced **5 guest favorites** (sourdough, organic milk, dark roast coffee, herbal tea, plush towels) to your shopping list.
-4. 🏡 **Alexa+ Smart Home Routine:** Armed **"Parents Arrival Welcome Routine"** for Friday at 4:30 PM to pre-condition the guest room to 71°F, turn on warm lighting, and activate a temporary guest lock code.
+4. 🏡 **Alexa+ Smart Home Routine:** Armed **"Parents Arrival Welcome Routine"** for Friday at 4:30 PM to pre-condition the guest room to 71°F, turn on warm lighting, and arm simulated guest lock pass (SIMULATED-CODE-NOT-ISSUED; no physical lock contacted).
 
 Everything is live on your dashboard and ready for tracking.`;
 
@@ -538,12 +691,58 @@ Everything is live on your dashboard and ready for tracking.`;
 }
 
 /**
- * SCENARIO 2: "Actually, they're arriving Saturday at 5 PM."
+ * SCENARIO 2: Rescheduling (Saturday or explicit calendar date)
  */
-function handleScenario2RescheduleSaturday(state: HouseholdState, _params: Record<string, any>): AgentExecutionResult {
+function handleScenario2RescheduleSaturday(state: HouseholdState, params: Record<string, any>): AgentExecutionResult {
+  // 1. Check for impossible calendar date (e.g., February 31, April 31)
+  if (params.isImpossibleDate) {
+    const errorText = `I couldn't reschedule the visit because **${params.invalidDateDesc || 'the specified date'}** is not a valid calendar date. Please specify a valid date (e.g., *"Move the visit to November 14, 2026 at 5 PM"*).`;
+    const assistantMessage: ChatMessage = {
+      id: `msg-asst-${Date.now()}`,
+      sender: 'assistant',
+      text: errorText,
+      timestamp: new Date().toISOString(),
+      suggestedActions: [
+        "Actually, they're arriving Saturday at 5 PM.",
+        'What still needs doing before they arrive?'
+      ]
+    };
+    return {
+      nextState: {
+        ...state,
+        chatHistory: [...state.chatHistory, assistantMessage]
+      },
+      responseMessage: assistantMessage,
+      executedTools: []
+    };
+  }
+
+  // 2. Check for ambiguous rescheduling request
+  if (params.isAmbiguous) {
+    const clarificationText = "Could you please specify the exact date and time for the visit? For example, you can say:\n- *\"Move the visit to Saturday at 5 PM\"*\n- *\"Move the visit to November 14, 2026 at 5 PM\"*";
+    const assistantMessage: ChatMessage = {
+      id: `msg-asst-${Date.now()}`,
+      sender: 'assistant',
+      text: clarificationText,
+      timestamp: new Date().toISOString(),
+      suggestedActions: [
+        "Actually, they're arriving Saturday at 5 PM.",
+        'What still needs doing before they arrive?'
+      ]
+    };
+    return {
+      nextState: {
+        ...state,
+        chatHistory: [...state.chatHistory, assistantMessage]
+      },
+      responseMessage: assistantMessage,
+      executedTools: []
+    };
+  }
+
   const activePlan = state.activePlan;
 
-  // Handle missing active plan gracefully
+  // 3. Handle missing active plan gracefully
   if (!activePlan) {
     const assistantMessage: ChatMessage = {
       id: `msg-asst-${Date.now()}`,
@@ -566,27 +765,62 @@ function handleScenario2RescheduleSaturday(state: HouseholdState, _params: Recor
     };
   }
 
-  const planId = activePlan.id;
-  // Compute Saturday relative to the active visit plan, preventing unintended week skips
-  const newSaturdayDate = getRescheduledDateForPlan(activePlan.targetDate, 6, 17, 0); // Saturday 5:00 PM
-  const newSundayDate = new Date(newSaturdayDate);
-  newSundayDate.setDate(newSaturdayDate.getDate() + 1);
-  newSundayDate.setHours(18, 0, 0, 0);
+  // 4. Resolve target date (explicit calendar date or Saturday relative to plan)
+  let targetStartDate: Date;
+  if (params.explicitDate) {
+    targetStartDate = new Date(params.explicitDate);
+    // Reject dates in the past
+    if (targetStartDate.getTime() < Date.now() - 60 * 1000) {
+      const pastMsgText = `The requested date (**${formatDateTime(targetStartDate.toISOString())}**) is in the past. Please specify an upcoming date and time for the visit.`;
+      const assistantMessage: ChatMessage = {
+        id: `msg-asst-${Date.now()}`,
+        sender: 'assistant',
+        text: pastMsgText,
+        timestamp: new Date().toISOString(),
+        suggestedActions: [
+          "Actually, they're arriving Saturday at 5 PM.",
+          'What still needs doing before they arrive?'
+        ]
+      };
+      return {
+        nextState: {
+          ...state,
+          chatHistory: [...state.chatHistory, assistantMessage]
+        },
+        responseMessage: assistantMessage,
+        executedTools: []
+      };
+    }
+  } else {
+    // Default Saturday 5:00 PM relative to active visit plan
+    targetStartDate = getRescheduledDateForPlan(activePlan.targetDate, 6, 17, 0);
+  }
 
-  // 1. Tool Call: calendar.updateEvent
-  // Update ONLY the event associated with this active plan!
+  const planId = activePlan.id;
+
+  // 5. Tool Call: calendar.updateEvent
+  // Find intended target visit event
   const targetEvent = state.events.find(
-    e => e.planId === planId || (activePlan.targetEventId && e.id === activePlan.targetEventId)
+    e => (activePlan.targetEventId && e.id === activePlan.targetEventId) || (e.planId === planId && e.type === 'visitor')
   );
+  const targetEventId = targetEvent ? targetEvent.id : activePlan.targetEventId;
   const originalDateFormatted = targetEvent ? formatDateTime(targetEvent.start) : 'Friday 6:00 PM';
 
+  // Preserve target event duration
+  const originalDurationMs = targetEvent
+    ? (new Date(targetEvent.end).getTime() - new Date(targetEvent.start).getTime())
+    : (45 * 60 * 60 * 1000); // 45 hours default
+  const durationMs = originalDurationMs > 0 ? originalDurationMs : (45 * 60 * 60 * 1000);
+  const targetEndDate = new Date(targetStartDate.getTime() + durationMs);
+
+  // Update ONLY the target event; do NOT overwrite unrelated events
   const updatedEvents = state.events.map(e => {
-    if (e.planId === planId || (activePlan.targetEventId && e.id === activePlan.targetEventId)) {
+    if (targetEventId ? e.id === targetEventId : (e.planId === planId && e.type === 'visitor')) {
       return {
         ...e,
-        start: newSaturdayDate.toISOString(),
-        end: newSundayDate.toISOString(),
-        notes: `${e.notes ? e.notes.replace(/\s*\[Updated:.*?\]/g, '') : ''} [Updated: arrival moved to Saturday 5:00 PM]`
+        start: targetStartDate.toISOString(),
+        end: targetEndDate.toISOString(),
+        notes: `${e.notes ? e.notes.replace(/\s*\[Updated:.*?\]/g, '') : ''} [Updated: arrival moved to ${formatDateTime(targetStartDate.toISOString())}]`
       };
     }
     return e;
@@ -596,52 +830,51 @@ function handleScenario2RescheduleSaturday(state: HouseholdState, _params: Recor
     id: `tool-${Date.now()}-1`,
     timestamp: new Date().toISOString(),
     toolName: 'calendar.updateEvent',
-    description: `Shifted calendar event "${targetEvent?.title || 'Parents Weekend Visit'}" from ${originalDateFormatted} to ${formatDateTime(newSaturdayDate.toISOString())}`,
+    description: `Shifted calendar event "${targetEvent?.title || 'Parents Weekend Visit'}" from ${originalDateFormatted} to ${formatDateTime(targetStartDate.toISOString())}`,
     input: {
-      eventId: targetEvent?.id || activePlan.targetEventId,
+      eventId: targetEventId,
       previousStart: targetEvent?.start,
-      newStart: newSaturdayDate.toISOString(),
-      newEnd: newSundayDate.toISOString()
+      newStart: targetStartDate.toISOString(),
+      newEnd: targetEndDate.toISOString()
     },
     output: {
       status: 'updated',
-      deltaHours: 23,
-      calendarSync: 'Simulated Alexa Calendar synced with Google Calendar',
+      calendarSync: 'Committed to simulated household calendar (client simulation)',
       simulatedLatencyMs: 46
     },
     status: 'success',
     executionTimeMs: 46
   };
 
-  // 2. Tool Call: tasks.rescheduleAssociated
+  // 6. Tool Call: tasks.rescheduleAssociated
   // Shift ONLY tasks belonging to activePlan.id.
   // PRESERVE completion status, category, assignee, notes, estimatedMinutes!
-  const satMorning = new Date(newSaturdayDate); satMorning.setHours(11, 0, 0, 0);
-  const satNoon = new Date(newSaturdayDate); satNoon.setHours(13, 0, 0, 0);
-  const satAfternoon = new Date(newSaturdayDate); satAfternoon.setHours(14, 0, 0, 0);
-  const satLateAfternoon = new Date(newSaturdayDate); satLateAfternoon.setHours(15, 30, 0, 0);
-  const satPreArrival = new Date(newSaturdayDate); satPreArrival.setHours(16, 0, 0, 0);
+  const morningDeadline = new Date(targetStartDate); morningDeadline.setHours(11, 0, 0, 0);
+  const noonDeadline = new Date(targetStartDate); noonDeadline.setHours(13, 0, 0, 0);
+  const groceryDeadline = new Date(targetStartDate.getTime() - 3 * 60 * 60 * 1000); // 3h before arrival
+  const cleaningDeadline = new Date(targetStartDate.getTime() - 90 * 60 * 1000); // 90 min before
+  const smartHomeDeadline = new Date(targetStartDate.getTime() - 60 * 60 * 1000); // 60 min before
 
   let rescheduledCount = 0;
   const updatedTasks = state.tasks.map(t => {
     if (t.planId === planId) {
       rescheduledCount++;
-      let newDue = satLateAfternoon.toISOString();
+      let newDue = cleaningDeadline.toISOString();
 
       if (t.category === 'guest_room') {
-        newDue = t.title.toLowerCase().includes('bathroom') ? satNoon.toISOString() : satMorning.toISOString();
+        newDue = t.title.toLowerCase().includes('bathroom') ? noonDeadline.toISOString() : morningDeadline.toISOString();
       } else if (t.category === 'groceries') {
-        newDue = satAfternoon.toISOString();
+        newDue = groceryDeadline.toISOString();
       } else if (t.category === 'cleaning') {
-        newDue = satLateAfternoon.toISOString();
+        newDue = cleaningDeadline.toISOString();
       } else if (t.category === 'smart_home') {
-        newDue = satPreArrival.toISOString();
+        newDue = smartHomeDeadline.toISOString();
       }
 
       return {
         ...t,
         dueDate: newDue
-        // t.completed, t.estimatedMinutes, t.assignee, t.notes are fully preserved!
+        // t.completed, t.estimatedMinutes, t.assignee, t.notes are strictly preserved!
       };
     }
     return t;
@@ -651,33 +884,36 @@ function handleScenario2RescheduleSaturday(state: HouseholdState, _params: Recor
     id: `tool-${Date.now()}-2`,
     timestamp: new Date().toISOString(),
     toolName: 'tasks.rescheduleAssociated',
-    description: `Rescheduled ${rescheduledCount} associated preparation tasks forward to Saturday morning/afternoon`,
+    description: `Rescheduled ${rescheduledCount} associated preparation tasks to ${formatDateShort(targetStartDate.toISOString())} with pre-arrival buffers preserved`,
     input: {
       planId,
-      newArrivalTarget: newSaturdayDate.toISOString(),
+      newArrivalTarget: targetStartDate.toISOString(),
       adjustmentPolicy: 'preserve_pre_arrival_buffers'
     },
     output: {
       rescheduledCount,
       freshnessWindowPreserved: true,
-      groceryRunShiftedTo: formatDateTime(satAfternoon.toISOString()),
+      groceryRunShiftedTo: formatDateTime(groceryDeadline.toISOString()),
       simulatedLatencyMs: 58
     },
     status: 'success',
     executionTimeMs: 58
   };
 
-  // 3. Tool Call: routines.updateRoutineTrigger
+  // 7. Tool Call: routines.updateRoutineTrigger
   // Update ONLY routines belonging to activePlan.id!
-  const newRoutineTriggerTime = new Date(newSaturdayDate);
-  newRoutineTriggerTime.setHours(15, 30, 0, 0); // 90 min before Saturday 5:00 PM
+  const routineTriggerTime = new Date(targetStartDate.getTime() - 90 * 60 * 1000); // 90 min before arrival
+  const routineTriggerDayLabel = params.explicitDate 
+    ? formatDateShort(targetStartDate.toISOString()) 
+    : targetStartDate.toLocaleDateString('en-US', { weekday: 'long' });
+  const triggerString = `${routineTriggerDayLabel} at ${formatTimeOnly(routineTriggerTime.toISOString())} (90 mins before arrival)`;
 
   const updatedRoutines = state.routines.map(r => {
     if (r.planId === planId) {
       return {
         ...r,
-        trigger: 'Saturday at 3:30 PM (90 mins before arrival)',
-        triggerTime: newRoutineTriggerTime.toISOString(),
+        trigger: triggerString,
+        triggerTime: routineTriggerTime.toISOString(),
         status: 'scheduled' as const
       };
     }
@@ -688,31 +924,31 @@ function handleScenario2RescheduleSaturday(state: HouseholdState, _params: Recor
     id: `tool-${Date.now()}-3`,
     timestamp: new Date().toISOString(),
     toolName: 'routines.updateRoutineTrigger',
-    description: `Updated "Parents Arrival Welcome Routine" trigger to Saturday at 3:30 PM`,
+    description: `Updated "Parents Arrival Welcome Routine" trigger to ${triggerString}`,
     input: {
       routineName: 'Parents Arrival Welcome Routine',
-      newTriggerTime: newRoutineTriggerTime.toISOString(),
+      newTriggerTime: routineTriggerTime.toISOString(),
       preConditionBufferMinutes: 90
     },
     output: {
       status: 'rescheduled',
-      deviceTarget: 'Thermostat 71°F, Hue Warm Welcome, Guest PIN activated Saturday afternoon',
+      deviceTarget: 'Thermostat 71°F, Hue Warm Welcome, Guest pass [SIMULATED-CODE-NOT-ISSUED] (no physical lock contacted)',
       simulatedLatencyMs: 34
     },
     status: 'success',
     executionTimeMs: 34
   };
 
-  // Update Plan milestones and targetDate while preserving milestone completion status
+  // 8. Update Plan milestones and targetDate while preserving milestone completion status
   const updatedPlan: Plan = {
     ...activePlan,
-    targetDate: newSaturdayDate.toISOString(),
+    targetDate: targetStartDate.toISOString(),
     updatedAt: new Date().toISOString(),
     milestones: activePlan.milestones.map(m => {
-      if (m.title.toLowerCase().includes('clean')) return { ...m, dueDate: satMorning.toISOString() };
-      if (m.title.toLowerCase().includes('grocer') || m.title.toLowerCase().includes('restock')) return { ...m, dueDate: satAfternoon.toISOString() };
-      if (m.title.toLowerCase().includes('routine') || m.title.toLowerCase().includes('smart')) return { ...m, dueDate: satLateAfternoon.toISOString() };
-      if (m.title.toLowerCase().includes('arrival')) return { ...m, dueDate: newSaturdayDate.toISOString() };
+      if (m.title.toLowerCase().includes('clean')) return { ...m, dueDate: morningDeadline.toISOString() };
+      if (m.title.toLowerCase().includes('grocer') || m.title.toLowerCase().includes('restock')) return { ...m, dueDate: groceryDeadline.toISOString() };
+      if (m.title.toLowerCase().includes('routine') || m.title.toLowerCase().includes('smart')) return { ...m, dueDate: cleaningDeadline.toISOString() };
+      if (m.title.toLowerCase().includes('arrival')) return { ...m, dueDate: targetStartDate.toISOString() };
       return m;
     })
   };
@@ -729,18 +965,18 @@ function handleScenario2RescheduleSaturday(state: HouseholdState, _params: Recor
     readinessScore: readinessResult.readinessPercent,
     completedTasks: readinessResult.completedTasks,
     totalTasks: readinessResult.totalTasks,
-    nextMilestone: readinessResult.nextMilestoneTitle || 'Deep Clean Guest Suite (Saturday 11:00 AM)',
-    targetDateFormatted: formatDateTime(newSaturdayDate.toISOString())
+    nextMilestone: readinessResult.nextMilestoneTitle || `Deep Clean Guest Suite (${formatDateShort(targetStartDate.toISOString())} 11:00 AM)`,
+    targetDateFormatted: formatDateTime(targetStartDate.toISOString())
   };
 
-  const assistantResponseText = `Understood! I've dynamically updated your preparation plan for **Saturday at 5:00 PM** (${formatDateShort(newSaturdayDate.toISOString())}).
+  const assistantResponseText = `Understood! I've dynamically updated your preparation plan for **${formatDateTime(targetStartDate.toISOString())}**.
 
 Here is what was automatically adjusted:
-1. 📅 **Calendar:** Moved **Parents Weekend Visit** from Friday to **Saturday at 5:00 PM**.
-2. 📋 **Tasks & Deadlines:** Shifted **${rescheduledCount} preparation tasks** into Saturday morning/afternoon so your groceries stay fresh and the house stays spotless right before arrival.
-3. 🏡 **Alexa+ Smart Home Routine:** Rescheduled the **Parents Arrival Welcome Routine** to trigger at **Saturday 3:30 PM** (90 minutes before they arrive).
+1. 📅 **Calendar:** Moved **${targetEvent?.title || 'Parents Weekend Visit'}** to **${formatDateTime(targetStartDate.toISOString())}**.
+2. 📋 **Tasks & Deadlines:** Shifted **${rescheduledCount} preparation tasks** forward with preparation buffers preserved so your groceries stay fresh and the house stays spotless right before arrival.
+3. 🏡 **Alexa+ Smart Home Routine:** Rescheduled the **Parents Arrival Welcome Routine** to trigger at **${formatDateShort(targetStartDate.toISOString())} at ${formatTimeOnly(routineTriggerTime.toISOString())}** (90 minutes before arrival).
 
-You now have an extra day of buffer!`;
+All changes have been synchronized across your household state.`;
 
   const assistantMessage: ChatMessage = {
     id: `msg-asst-${Date.now()}`,
@@ -770,6 +1006,183 @@ You now have an extra day of buffer!`;
     nextState,
     responseMessage: assistantMessage,
     executedTools: [toolCall1, toolCall2, toolCall3]
+  };
+}
+
+/**
+ * Handle natural language task addition
+ */
+function handleAddTask(state: HouseholdState, params: Record<string, any>): AgentExecutionResult {
+  if (params.needsTitle || !params.title) {
+    const assistantMessage: ChatMessage = {
+      id: `msg-asst-${Date.now()}`,
+      sender: 'assistant',
+      text: "What task would you like to add? Please specify a title (e.g., *\"Add task: Clean patio furniture\"*) or use the task creation form on the Chores tab.",
+      timestamp: new Date().toISOString(),
+      suggestedActions: [
+        'Add task: Clean the patio furniture',
+        'Add task: Vacuum downstairs rug',
+        'View Chores & Tasks'
+      ]
+    };
+    return {
+      nextState: {
+        ...state,
+        chatHistory: [...state.chatHistory, assistantMessage]
+      },
+      responseMessage: assistantMessage,
+      executedTools: []
+    };
+  }
+
+  const activePlanId = state.activePlan?.id;
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(17, 0, 0, 0);
+
+  const newTask: Task = {
+    id: `task-custom-${Date.now()}`,
+    planId: activePlanId,
+    title: params.title,
+    category: 'general',
+    assignee: params.assignee || 'Shared',
+    dueDate: tomorrow.toISOString(),
+    priority: params.priority || 'medium',
+    completed: false,
+    estimatedMinutes: 25,
+    notes: 'Created via conversational assistant'
+  };
+
+  const toolCall: ToolCall = {
+    id: `tool-${Date.now()}-task-create`,
+    timestamp: new Date().toISOString(),
+    toolName: 'tasks.createTask',
+    description: `Created new task: "${newTask.title}" (assigned to ${newTask.assignee})`,
+    input: {
+      title: newTask.title,
+      assignee: newTask.assignee,
+      priority: newTask.priority,
+      due: newTask.dueDate
+    },
+    output: {
+      taskId: newTask.id,
+      status: 'created',
+      simulatedLatencyMs: 24
+    },
+    status: 'success',
+    executionTimeMs: 24
+  };
+
+  const assistantMessage: ChatMessage = {
+    id: `msg-asst-${Date.now()}`,
+    sender: 'assistant',
+    text: `Created task **"${newTask.title}"** (assigned to **${newTask.assignee}**, priority: ${newTask.priority}).`,
+    timestamp: new Date().toISOString(),
+    toolCalls: [toolCall],
+    suggestedActions: [
+      'What still needs doing before they arrive?',
+      'View Chores & Tasks'
+    ]
+  };
+
+  const nextState: HouseholdState = {
+    ...state,
+    tasks: [newTask, ...state.tasks],
+    toolHistory: [toolCall, ...state.toolHistory],
+    chatHistory: [...state.chatHistory, assistantMessage]
+  };
+
+  return {
+    nextState,
+    responseMessage: assistantMessage,
+    executedTools: [toolCall]
+  };
+}
+
+/**
+ * Handle natural language calendar event creation
+ */
+function handleCreateCalendarEvent(state: HouseholdState, params: Record<string, any>): AgentExecutionResult {
+  if (params.needsDetails || !params.startDate) {
+    const assistantMessage: ChatMessage = {
+      id: `msg-asst-${Date.now()}`,
+      sender: 'assistant',
+      text: "To schedule an event, please provide a title and date/time (e.g., *\"Schedule event: Dentist appointment on Nov 15 at 3 PM\"*) or use the validated form on the Calendar tab.",
+      timestamp: new Date().toISOString(),
+      suggestedActions: [
+        'Schedule event: Dentist appointment on Nov 15 at 3 PM',
+        'View Calendar'
+      ]
+    };
+    return {
+      nextState: {
+        ...state,
+        chatHistory: [...state.chatHistory, assistantMessage]
+      },
+      responseMessage: assistantMessage,
+      executedTools: []
+    };
+  }
+
+  const start = new Date(params.startDate);
+  const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 hour duration default
+
+  const newEvent: CalendarEvent = {
+    id: `evt-custom-${Date.now()}`,
+    planId: state.activePlan?.id,
+    title: params.title || 'Household Calendar Event',
+    start: start.toISOString(),
+    end: end.toISOString(),
+    type: 'family',
+    location: 'Home',
+    attendees: ['Vaibhav', 'Sarah'],
+    notes: 'Scheduled via conversational assistant'
+  };
+
+  const toolCall: ToolCall = {
+    id: `tool-${Date.now()}-cal-create`,
+    timestamp: new Date().toISOString(),
+    toolName: 'calendar.createEvent',
+    description: `Scheduled calendar event: "${newEvent.title}" for ${formatDateTime(newEvent.start)}`,
+    input: {
+      title: newEvent.title,
+      start: newEvent.start,
+      end: newEvent.end,
+      type: newEvent.type
+    },
+    output: {
+      eventId: newEvent.id,
+      status: 'created',
+      calendarSync: 'Committed to simulated household calendar (client simulation)',
+      simulatedLatencyMs: 36
+    },
+    status: 'success',
+    executionTimeMs: 36
+  };
+
+  const assistantMessage: ChatMessage = {
+    id: `msg-asst-${Date.now()}`,
+    sender: 'assistant',
+    text: `Scheduled **"${newEvent.title}"** on your household calendar for **${formatDateTime(newEvent.start)}**.`,
+    timestamp: new Date().toISOString(),
+    toolCalls: [toolCall],
+    suggestedActions: [
+      'View Calendar',
+      'What still needs doing before they arrive?'
+    ]
+  };
+
+  const nextState: HouseholdState = {
+    ...state,
+    events: [newEvent, ...state.events],
+    toolHistory: [toolCall, ...state.toolHistory],
+    chatHistory: [...state.chatHistory, assistantMessage]
+  };
+
+  return {
+    nextState,
+    responseMessage: assistantMessage,
+    executedTools: [toolCall]
   };
 }
 

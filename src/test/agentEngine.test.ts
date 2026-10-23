@@ -7,6 +7,7 @@ import {
   toggleRoutineInState 
 } from '../services/agentEngine';
 import { computePlanReadiness } from '../utils/readiness';
+import { resetDemoState } from '../services/storage';
 
 describe('HomeHandoff Agent Engine & Tool Execution', () => {
   it('Scenario 1: Creates multi-step plan, calendar event, tasks, shopping, and smart routine', () => {
@@ -258,5 +259,198 @@ describe('HomeHandoff Agent Engine & Tool Execution', () => {
     const routineId = step3.nextState.routines[0].id;
     const stateWithRoutineToggled = toggleRoutineInState(step3.nextState, routineId);
     expect(stateWithRoutineToggled.toolHistory.some(t => t.toolName === 'routines.toggleRoutine')).toBe(true);
+  });
+
+  it('Removes hardcoded PIN 8492 and uses SIMULATED-CODE-NOT-ISSUED with explicit no-lock disclosure', () => {
+    const initialState = createInitialSeedState();
+    const result = processUserMessage('My parents are visiting Friday. Prepare the house.', initialState);
+
+    const serializedState = JSON.stringify(result.nextState);
+    const serializedTools = JSON.stringify(result.executedTools);
+
+    // Literal 8492 must NOT appear anywhere in state or tool traces
+    expect(serializedState.includes('8492')).toBe(false);
+    expect(serializedTools.includes('8492')).toBe(false);
+
+    // Fictional placeholder must be present
+    expect(serializedState.includes('SIMULATED-CODE-NOT-ISSUED')).toBe(true);
+    expect(serializedTools.includes('SIMULATED-CODE-NOT-ISSUED')).toBe(true);
+
+    // Explicit disclosure that no physical lock was contacted
+    expect(serializedState.toLowerCase().includes('no physical lock')).toBe(true);
+  });
+
+  it('Rescheduling: Moves visit to an explicit calendar date (e.g., November 14, 2026 at 5 PM) and preserves event duration, task buffers, and routine triggers', () => {
+    const initialState = createInitialSeedState();
+    const step1 = processUserMessage('My parents are visiting Friday. Prepare the house.', initialState);
+
+    // Target visit event before reschedule
+    const originalEvent = step1.nextState.events.find(e => e.id === step1.nextState.activePlan?.targetEventId);
+    expect(originalEvent).toBeDefined();
+    const originalDurationMs = new Date(originalEvent!.end).getTime() - new Date(originalEvent!.start).getTime();
+
+    // Reschedule to an explicit date
+    const step2 = processUserMessage('Move the visit to November 14, 2026 at 5 PM', step1.nextState);
+
+    expect(step2.executedTools.length).toBe(3);
+    expect(step2.executedTools.map(t => t.toolName)).toEqual([
+      'calendar.updateEvent',
+      'tasks.rescheduleAssociated',
+      'routines.updateRoutineTrigger'
+    ]);
+
+    // Check calendar event
+    const updatedEvent = step2.nextState.events.find(e => e.id === originalEvent!.id);
+    expect(updatedEvent).toBeDefined();
+    const newStart = new Date(updatedEvent!.start);
+    expect(newStart.getFullYear()).toBe(2026);
+    expect(newStart.getMonth()).toBe(10); // November
+    expect(newStart.getDate()).toBe(14);
+    expect(newStart.getHours()).toBe(17); // 5 PM
+
+    // Verify duration was preserved
+    const newDurationMs = new Date(updatedEvent!.end).getTime() - newStart.getTime();
+    expect(newDurationMs).toBe(originalDurationMs);
+
+    // Check task deadlines have pre-arrival buffers relative to Nov 14 at 5 PM
+    const planTasks = step2.nextState.tasks.filter(t => t.planId === step2.nextState.activePlan?.id);
+    expect(planTasks.length).toBe(5);
+
+    const bedroomTask = planTasks.find(t => t.title.includes('bedroom'));
+    expect(new Date(bedroomTask!.dueDate).getDate()).toBe(14);
+    expect(new Date(bedroomTask!.dueDate).getHours()).toBe(11); // Morning of arrival
+
+    const bathroomTask = planTasks.find(t => t.title.includes('bathroom'));
+    expect(new Date(bathroomTask!.dueDate).getDate()).toBe(14);
+    expect(new Date(bathroomTask!.dueDate).getHours()).toBe(13); // Midday of arrival
+
+    const groceryTask = planTasks.find(t => t.title.includes('groceries'));
+    expect(new Date(groceryTask!.dueDate).getDate()).toBe(14);
+    expect(new Date(groceryTask!.dueDate).getHours()).toBe(14); // 3h before 5 PM arrival
+
+    // Check routine trigger updated to 90 mins before (3:30 PM)
+    const welcomeRoutine = step2.nextState.routines.find(r => r.name.includes('Parents'));
+    expect(welcomeRoutine?.trigger).toContain('3:30 PM');
+    expect(welcomeRoutine?.trigger).toContain('90 mins before arrival');
+  });
+
+  it('Rescheduling: Preserves completed tasks and leaves unrelated household events and chores untouched', () => {
+    const initialState = createInitialSeedState();
+    const step1 = processUserMessage('My parents are visiting Friday. Prepare the house.', initialState);
+
+    // Complete one plan task and note unrelated tasks and events
+    const planTasks = step1.nextState.tasks.filter(t => t.planId === step1.nextState.activePlan?.id);
+    const stateWithCompletedTask = toggleTaskInState(step1.nextState, planTasks[0].id);
+
+    const unrelatedTaskOriginal = stateWithCompletedTask.tasks.find(t => t.id === 'task-seed-2')!;
+    const unrelatedEventOriginal = stateWithCompletedTask.events.find(e => e.id === 'evt-seed-1')!;
+    const unrelatedRoutineOriginal = stateWithCompletedTask.routines.find(r => r.id === 'rtn-seed-1')!;
+
+    // Reschedule
+    const step2 = processUserMessage('Move the visit to November 14, 2026 at 5 PM', stateWithCompletedTask);
+
+    // Plan task completion was preserved
+    const toggledTaskAfter = step2.nextState.tasks.find(t => t.id === planTasks[0].id);
+    expect(toggledTaskAfter?.completed).toBe(true);
+
+    // Unrelated task untouched
+    const unrelatedTaskAfter = step2.nextState.tasks.find(t => t.id === 'task-seed-2');
+    expect(unrelatedTaskAfter?.dueDate).toBe(unrelatedTaskOriginal.dueDate);
+    expect(unrelatedTaskAfter?.completed).toBe(unrelatedTaskOriginal.completed);
+
+    // Unrelated event untouched
+    const unrelatedEventAfter = step2.nextState.events.find(e => e.id === 'evt-seed-1');
+    expect(unrelatedEventAfter?.start).toBe(unrelatedEventOriginal.start);
+    expect(unrelatedEventAfter?.end).toBe(unrelatedEventOriginal.end);
+
+    // Unrelated routine untouched
+    const unrelatedRoutineAfter = step2.nextState.routines.find(r => r.id === 'rtn-seed-1');
+    expect(unrelatedRoutineAfter?.trigger).toBe(unrelatedRoutineOriginal.trigger);
+  });
+
+  it('Rejects impossible calendar dates (e.g., February 31) without crashing or JavaScript date overflow', () => {
+    const initialState = createInitialSeedState();
+    const step1 = processUserMessage('My parents are visiting Friday. Prepare the house.', initialState);
+
+    const step2 = processUserMessage('Move the visit to February 31, 2026 at 5 PM', step1.nextState);
+
+    // Must not execute any mutation tools
+    expect(step2.executedTools.length).toBe(0);
+    // Must clearly state why
+    expect(step2.responseMessage.text.toLowerCase()).toContain('not a valid calendar date');
+    // Plan target date must remain untouched
+    expect(step2.nextState.activePlan?.targetDate).toBe(step1.nextState.activePlan?.targetDate);
+  });
+
+  it('Handles ambiguous rescheduling requests and past dates with helpful clarifications', () => {
+    const initialState = createInitialSeedState();
+    const step1 = processUserMessage('My parents are visiting Friday. Prepare the house.', initialState);
+
+    // 1. Ambiguous query without date
+    const ambiguousResult = processUserMessage('Move the visit', step1.nextState);
+    expect(ambiguousResult.executedTools.length).toBe(0);
+    expect(ambiguousResult.responseMessage.text.toLowerCase()).toContain('specify the exact date');
+
+    // 2. Date in the past
+    const pastResult = processUserMessage('Move the visit to 2020-01-01 at 5 PM', step1.nextState);
+    expect(pastResult.executedTools.length).toBe(0);
+    expect(pastResult.responseMessage.text.toLowerCase()).toContain('in the past');
+  });
+
+  it('ADD_TASK intent: Creates task from natural language with assignee and priority, asks if title missing', () => {
+    const initialState = createInitialSeedState();
+
+    // 1. Missing title
+    const missingTitleResult = processUserMessage('Add task', initialState);
+    expect(missingTitleResult.executedTools.length).toBe(0);
+    expect(missingTitleResult.responseMessage.text.toLowerCase()).toContain('specify a title');
+
+    // 2. Valid task creation
+    const taskResult = processUserMessage('Add task: Clean the patio furniture assigned to Sarah', initialState);
+    expect(taskResult.executedTools.length).toBe(1);
+    expect(taskResult.executedTools[0].toolName).toBe('tasks.createTask');
+    expect(taskResult.nextState.tasks[0].title).toBe('Clean the patio furniture');
+    expect(taskResult.nextState.tasks[0].assignee).toBe('Sarah');
+  });
+
+  it('CREATE_CALENDAR_EVENT intent: Creates calendar event with explicit date/time, asks if details missing', () => {
+    const initialState = createInitialSeedState();
+
+    // 1. Missing date/time
+    const missingDetailsResult = processUserMessage('Schedule event: Dentist appointment', initialState);
+    expect(missingDetailsResult.executedTools.length).toBe(0);
+    expect(missingDetailsResult.responseMessage.text.toLowerCase()).toContain('provide a title and date/time');
+
+    // 2. Valid calendar event
+    const eventResult = processUserMessage('Schedule event: Dentist appointment on Nov 15 at 3 PM', initialState);
+    expect(eventResult.executedTools.length).toBe(1);
+    expect(eventResult.executedTools[0].toolName).toBe('calendar.createEvent');
+    expect(eventResult.nextState.events[0].title).toBe('Dentist appointment');
+    const eventStart = new Date(eventResult.nextState.events[0].start);
+    expect(eventStart.getMonth()).toBe(10); // November
+    expect(eventStart.getDate()).toBe(15);
+    expect(eventStart.getHours()).toBe(15); // 3 PM
+  });
+
+  it('Resets demo state cleanly after executing all 3 guided scenarios', () => {
+    const state0 = createInitialSeedState();
+
+    // Run scenario 1
+    const s1 = processUserMessage('My parents are visiting Friday. Prepare the house.', state0);
+    // Run scenario 2
+    const s2 = processUserMessage("Actually, they're arriving Saturday at 5 PM.", s1.nextState);
+    // Run scenario 3
+    const s3 = processUserMessage('What still needs doing before they arrive?', s2.nextState);
+
+    expect(s3.nextState.activePlan).not.toBeNull();
+    expect(s3.nextState.toolHistory.length).toBe(8); // 4 + 3 + 1
+
+    // Reset demo
+    const reset = resetDemoState();
+    expect(reset.activePlan).toBeNull();
+    expect(reset.toolHistory.length).toBe(0);
+    expect(reset.tasks.length).toBe(2); // Seed tasks restored
+    expect(reset.events.length).toBe(2); // Seed events restored
+    expect(reset.routines.length).toBe(1); // Seed routine restored
   });
 });

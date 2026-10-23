@@ -54,7 +54,9 @@ export const RoutinesModule: React.FC<RoutinesModuleProps> = ({
       } else if (action.deviceType === 'lighting') {
         simVal = action.targetState.scene ? `${action.targetState.scene} (${action.targetState.brightness || 65}%)` : 'Warm Welcome';
       } else if (action.deviceType === 'lock') {
-        simVal = '[Simulated Keypad Demo — Nonfunctional Pass]';
+        simVal = action.targetState.pinCode 
+          ? `Code: ${action.targetState.pinCode} (Client simulation — no physical lock contacted)`
+          : '[Simulated Keypad Demo — No Physical Lock Contacted]';
       } else if (action.deviceType === 'vacuum') {
         simVal = 'Pre-Arrival Quiet Sweep';
       } else {
