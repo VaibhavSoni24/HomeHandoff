@@ -95,7 +95,7 @@ export const TasksModule: React.FC<TasksModuleProps> = ({
           <h2 className="module-heading">Chores & Preparation Tasks</h2>
           <p className="module-subheading">
             {activePlanTitle 
-              ? `Synchronized with active plan: "${activePlanTitle}"` 
+              ? `Linked to active plan: "${activePlanTitle}"` 
               : 'Assigned household chores and preparation checklist'}
           </p>
         </div>

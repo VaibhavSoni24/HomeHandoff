@@ -75,7 +75,7 @@ export const DisclosuresModal: React.FC<DisclosuresModalProps> = ({ isOpen, onCl
               <div className="touchpoint-info">
                 <h4>3. Alexa Shopping List API</h4>
                 <p>
-                  Synchronizes guest amenities and grocery preferences organized by grocery aisle. 
+                  Manages guest amenities and grocery preferences organized by grocery aisle in local state (client simulation — no external Alexa cloud account connected). 
                   Items can be checked off and filtered by department.
                 </p>
               </div>
@@ -86,8 +86,8 @@ export const DisclosuresModal: React.FC<DisclosuresModalProps> = ({ isOpen, onCl
               <div className="touchpoint-info">
                 <h4>4. Alexa Smart Home Skills API</h4>
                 <p>
-                  Simulates smart device state management for thermostats, lighting scenes, guest access passcodes, and robotic vacuum runs. 
-                  Telemetry is derived directly from state without operating physical IoT hardware.
+                  Simulates smart device state management for thermostats, lighting scenes, simulated access pass placeholders (SIMULATED-CODE-NOT-ISSUED), and robotic vacuum runs. 
+                  No physical lock is contacted and no usable passcode is generated.
                 </p>
               </div>
             </div>

@@ -97,7 +97,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           <div className="assistant-hero-titles">
             <h2 className="assistant-title">Household Coordination Assistant</h2>
             <p className="assistant-subtitle">
-              Natural language instructions are decomposed into synchronized calendar updates, chore assignments, grocery lists, and smart-home routines.
+              Natural language instructions are decomposed into coordinated calendar updates, chore assignments, grocery lists, and smart-home routines.
             </p>
           </div>
           <div className="assistant-status-tag" role="status" aria-live="polite">

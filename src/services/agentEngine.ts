@@ -39,6 +39,12 @@ export type RecognizedIntent =
   | 'CREATE_CALENDAR_EVENT'
   | 'GENERIC_HELP';
 
+const NON_TEMPORAL_BY_TOKENS = new Set([
+  'hand', 'myself', 'yourself', 'himself', 'herself', 'ourselves', 'themselves',
+  'default', 'mistake', 'accident', 'chance', 'mail', 'email', 'phone', 'text',
+  'car', 'bus', 'train', 'plane', 'foot'
+]);
+
 export function classifyIntent(query: string, state: HouseholdState): { intent: RecognizedIntent; params: Record<string, any> } {
   const q = query.trim().toLowerCase();
 
@@ -274,25 +280,46 @@ export function classifyIntent(query: string, state: HouseholdState): { intent: 
     let dueDateIso: string | undefined = undefined;
 
     // A. Check for explicit deadline indicator (e.g. "due [date/on/by/at]?", "by", "before", "deadline:?")
-    const deadlinePattern = /(?:\s+(?:due(?:\s+(?:date|on|by|at))?|by|before|deadline:?))\s+([A-Za-z0-9,:\s-]+)$/i;
+    const deadlinePattern = /(?:\s+(due(?:\s+(?:date|on|by|at))?|deadline:?|before|by))\s+([A-Za-z0-9,:\s-]+)$/i;
     const deadlineMatch = taskBody.match(deadlinePattern);
 
     if (deadlineMatch) {
-      const candidateStr = deadlineMatch[1].trim();
-      const parsedDeadline = parseTaskDeadline(candidateStr);
-      if (parsedDeadline) {
-        if (parsedDeadline.isImpossible) {
+      const introKeyword = deadlineMatch[1].trim().toLowerCase();
+      const candidateStr = deadlineMatch[2].trim();
+      const isByMethod = introKeyword === 'by' && NON_TEMPORAL_BY_TOKENS.has(candidateStr.toLowerCase());
+
+      if (!isByMethod) {
+        // Explicit attempt to specify a deadline
+        const intendedTitle = taskBody.replace(deadlineMatch[0], '').replace(/^[:,\s]+|[:,\s]+$/g, '').trim();
+        const parsedDeadline = parseTaskDeadline(candidateStr);
+
+        if (parsedDeadline) {
+          if (parsedDeadline.isImpossible) {
+            return {
+              intent: 'ADD_TASK',
+              params: {
+                hasImpossibleDate: true,
+                impossibleDateDescription: parsedDeadline.impossibleDescription,
+                title: intendedTitle || taskBody
+              }
+            };
+          }
+          if (parsedDeadline.date) {
+            dueDateIso = parsedDeadline.date.toISOString();
+            taskBody = intendedTitle;
+          }
+        } else {
+          // Attempted deadline was unrecognized
           return {
             intent: 'ADD_TASK',
             params: {
-              hasImpossibleDate: true,
-              impossibleDateDescription: parsedDeadline.impossibleDescription
+              hasUnrecognizedDeadline: true,
+              unrecognizedDeadlineText: candidateStr,
+              title: intendedTitle || taskBody,
+              assignee,
+              priority
             }
           };
-        }
-        if (parsedDeadline.date) {
-          dueDateIso = parsedDeadline.date.toISOString();
-          taskBody = taskBody.replace(deadlineMatch[0], '').trim();
         }
       }
     } else {
@@ -301,20 +328,36 @@ export function classifyIntent(query: string, state: HouseholdState): { intent: 
       const onMatch = taskBody.match(onDatePattern);
       if (onMatch) {
         const candidateStr = onMatch[1].trim();
-        const parsedDeadline = parseTaskDeadline(candidateStr);
-        if (parsedDeadline) {
-          if (parsedDeadline.isImpossible) {
+        const temporalTerms = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekend|today|tomorrow|am|pm|\d{1,2}:\d{2}|\d{4})\b/i;
+        if (temporalTerms.test(candidateStr)) {
+          const intendedTitle = taskBody.replace(onMatch[0], '').replace(/^[:,\s]+|[:,\s]+$/g, '').trim();
+          const parsedDeadline = parseTaskDeadline(candidateStr);
+          if (parsedDeadline) {
+            if (parsedDeadline.isImpossible) {
+              return {
+                intent: 'ADD_TASK',
+                params: {
+                  hasImpossibleDate: true,
+                  impossibleDateDescription: parsedDeadline.impossibleDescription,
+                  title: intendedTitle || taskBody
+                }
+              };
+            }
+            if (parsedDeadline.date) {
+              dueDateIso = parsedDeadline.date.toISOString();
+              taskBody = intendedTitle;
+            }
+          } else {
             return {
               intent: 'ADD_TASK',
               params: {
-                hasImpossibleDate: true,
-                impossibleDateDescription: parsedDeadline.impossibleDescription
+                hasUnrecognizedDeadline: true,
+                unrecognizedDeadlineText: candidateStr,
+                title: intendedTitle || taskBody,
+                assignee,
+                priority
               }
             };
-          }
-          if (parsedDeadline.date) {
-            dueDateIso = parsedDeadline.date.toISOString();
-            taskBody = taskBody.replace(onMatch[0], '').trim();
           }
         }
       }
@@ -541,7 +584,7 @@ function handleScenario1ParentsVisit(state: HouseholdState): AgentExecutionResul
       priority: 'medium',
       completed: false,
       estimatedMinutes: 40,
-      notes: 'Pick up items synced to shopping list before 4 PM traffic'
+      notes: 'Pick up items added to shopping list before 4 PM traffic'
     },
     {
       id: `task-prep-${Date.now()}-4`,
@@ -758,7 +801,7 @@ function handleScenario1ParentsVisit(state: HouseholdState): AgentExecutionResul
 Here is what I've done across your household systems:
 1. 📅 **Calendar:** Blocked off **Parents Weekend Visit** (Friday 6:00 PM – Sunday 3:00 PM).
 2. 📋 **Tasks:** Generated **5 preparation tasks** distributed between Sarah (bedroom cleaning & entryway tidy) and Vaibhav (bathroom restock, grocery run & smart setup).
-3. 🛒 **Shopping:** Synced **5 guest favorites** (sourdough, organic milk, dark roast coffee, herbal tea, plush towels) to your shopping list.
+3. 🛒 **Shopping:** Added **5 guest favorites** (sourdough, organic milk, dark roast coffee, herbal tea, plush towels) to your shopping list.
 4. 🏡 **Alexa+ Smart Home Routine:** Armed **"Parents Arrival Welcome Routine"** for Friday at 4:30 PM to pre-condition the guest room to 71°F, turn on warm lighting, and arm simulated guest lock pass (SIMULATED-CODE-NOT-ISSUED; no physical lock contacted).
 
 Everything is live on your dashboard and ready for tracking.`;
@@ -1081,7 +1124,7 @@ Here is what was automatically adjusted:
 2. 📋 **Tasks & Deadlines:** Shifted **${rescheduledCount} preparation tasks** forward with preparation buffers preserved so your groceries stay fresh and the house stays spotless right before arrival.
 3. 🏡 **Alexa+ Smart Home Routine:** Rescheduled the **Parents Arrival Welcome Routine** to trigger at **${formatDateShort(targetStartDate.toISOString())} at ${formatTimeOnly(routineTriggerTime.toISOString())}** (90 minutes before arrival).
 
-All changes have been synchronized across your household state.`;
+All changes have been updated across your household state.`;
 
   const assistantMessage: ChatMessage = {
     id: `msg-asst-${Date.now()}`,
@@ -1126,6 +1169,30 @@ function handleAddTask(state: HouseholdState, params: Record<string, any>): Agen
       timestamp: new Date().toISOString(),
       suggestedActions: [
         'Add task: Clean the patio furniture',
+        'View Chores & Tasks'
+      ]
+    };
+    return {
+      nextState: {
+        ...state,
+        chatHistory: [...state.chatHistory, assistantMessage]
+      },
+      responseMessage: assistantMessage,
+      executedTools: []
+    };
+  }
+
+  if (params.hasUnrecognizedDeadline) {
+    const taskName = params.title || 'this task';
+    const deadlinePhrase = params.unrecognizedDeadlineText || 'the specified deadline';
+    const assistantMessage: ChatMessage = {
+      id: `msg-asst-${Date.now()}`,
+      sender: 'assistant',
+      text: `I couldn't understand the deadline "${deadlinePhrase}" for "${taskName}". Please provide a specific date or time (for example, "tomorrow at 5 PM", "Saturday at 5 PM", or "November 14, 2026 at 5 PM"), or create the task without a deadline.`,
+      timestamp: new Date().toISOString(),
+      suggestedActions: [
+        `Add task: ${taskName} due tomorrow at 5 PM`,
+        `Add task: ${taskName}`,
         'View Chores & Tasks'
       ]
     };
@@ -1494,7 +1561,7 @@ function handleGenericHelp(state: HouseholdState, _query: string): AgentExecutio
     text: `I'm your **HomeHandoff** household coordination agent. I coordinate multi-step household projects across calendar, tasks, shopping, and Alexa+ smart devices.
 
 Here are the 3 main hackathon scenarios you can trigger:
-1. **"My parents are visiting Friday. Prepare the house."** — Creates a synchronized preparation plan with calendar blocks, chores, grocery shopping, and smart home routines.
+1. **"My parents are visiting Friday. Prepare the house."** — Creates a coordinated preparation plan with calendar blocks, chores, grocery shopping, and smart home routines.
 2. **"Actually, they're arriving Saturday at 5 PM."** — Intelligently reschedules the visit, recalibrates task deadlines, and shifts smart home triggers while preserving prep buffers.
 3. **"What still needs doing before they arrive?"** — Inspects current completion states and generates an executive readiness report.`,
     timestamp: new Date().toISOString(),

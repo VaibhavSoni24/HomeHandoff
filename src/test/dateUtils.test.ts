@@ -255,5 +255,11 @@ describe('dateUtils: parseTaskDeadline helper', () => {
     expect(parseTaskDeadline('by hand', refTime)).toBeNull();
     expect(parseTaskDeadline('assigned to Sarah', refTime)).toBeNull();
   });
+
+  it('returns null for unrecognized deadline expressions like "in a fortnight" or "soon"', () => {
+    expect(parseTaskDeadline('in a fortnight', refTime)).toBeNull();
+    expect(parseTaskDeadline('soon', refTime)).toBeNull();
+    expect(parseTaskDeadline('before sunset', refTime)).toBeNull();
+  });
 });
 

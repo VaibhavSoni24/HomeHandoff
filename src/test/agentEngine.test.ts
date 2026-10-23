@@ -485,6 +485,54 @@ describe('HomeHandoff Agent Engine & Tool Execution', () => {
     expect(matches.length).toBe(1);
   });
 
+  it('ADD_TASK intent: Safely handles unrecognized deadline expressions without creating a task or embedding deadline in title', () => {
+    const initialState = createInitialSeedState();
+    const initialTasksCount = initialState.tasks.length;
+    const initialToolHistoryCount = initialState.toolHistory.length;
+
+    // 1. Unrecognized expression "in a fortnight"
+    const taskResult = processUserMessage(
+      'Add task: Clean the garage due in a fortnight assigned to Sarah',
+      initialState
+    );
+
+    // No tool execution and no task created
+    expect(taskResult.executedTools.length).toBe(0);
+    expect(taskResult.nextState.tasks.length).toBe(initialTasksCount);
+    expect(taskResult.nextState.toolHistory.length).toBe(initialToolHistoryCount);
+
+    // Response asks to clarify and mentions both the clean task title and the unrecognized phrase
+    expect(taskResult.responseMessage.text.toLowerCase()).toContain("couldn't understand the deadline");
+    expect(taskResult.responseMessage.text).toContain('in a fortnight');
+    expect(taskResult.responseMessage.text).toContain('Clean the garage');
+    // Ensure the task title does not have "due in a fortnight"
+    expect(taskResult.nextState.tasks.some(t => t.title.includes('fortnight'))).toBe(false);
+
+    // 2. Unrecognized expression "deadline: soon"
+    const soonResult = processUserMessage(
+      'Add task: Paint the fence deadline: soon',
+      initialState
+    );
+    expect(soonResult.executedTools.length).toBe(0);
+    expect(soonResult.nextState.tasks.length).toBe(initialTasksCount);
+    expect(soonResult.responseMessage.text.toLowerCase()).toContain("couldn't understand the deadline");
+    expect(soonResult.responseMessage.text).toContain('soon');
+    expect(soonResult.responseMessage.text).toContain('Paint the fence');
+  });
+
+  it('ADD_TASK intent: Distinguishes non-temporal "by" phrases (e.g., "by hand") and creates task without deadline', () => {
+    const initialState = createInitialSeedState();
+    const taskResult = processUserMessage(
+      'Add task: Clean the patio furniture by hand',
+      initialState
+    );
+    expect(taskResult.executedTools.length).toBe(1);
+    expect(taskResult.executedTools[0].toolName).toBe('tasks.createTask');
+    expect(taskResult.nextState.tasks[0].title).toBe('Clean the patio furniture by hand');
+    expect(taskResult.nextState.tasks[0].dueDate).toBeUndefined();
+    expect(taskResult.responseMessage.text.toLowerCase()).toContain('no deadline assigned');
+  });
+
   it('CREATE_CALENDAR_EVENT intent: Creates calendar event with explicit date/time, asks if details missing', () => {
     const initialState = createInitialSeedState();
 

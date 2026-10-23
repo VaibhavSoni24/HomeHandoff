@@ -33,9 +33,9 @@ Live Demo: [https://your-domain.vercel.app](https://your-domain.vercel.app)
 > To ensure total transparency for judges, **none of the simulated integrations claim to be live Amazon cloud services** or require paid API credentials. Instead, HomeHandoff implements high-fidelity deterministic client simulation of Alexa APIs:
 > 
 > 1. **Simulated Alexa Voice Service (AVS) & Agent:** Natural language intent classifier with multi-turn context memory, autonomous tool execution dispatching, and optional browser voice synthesis via the Web Speech API.
-> 2. **Simulated Alexa Smart Home Skills API:** Orchestrates connected device fleet states, including Ecobee smart thermostats (pre-conditioning guest rooms to 71°F), Philips Hue lighting scenes ("Warm Welcome"), Schlage smart deadbolts (guest PIN generation), and Roborock robot vacuums.
-> 3. **Simulated Alexa Shopping List API:** Synchronizes guest food preferences and bath amenities organized by grocery store aisle.
-> 4. **Simulated Alexa Household Calendar:** Blocks out arrival and departure windows with preparation buffers and sync simulation.
+> 2. **Simulated Alexa Smart Home Skills API:** Simulates connected device fleet states, including Ecobee smart thermostats (pre-conditioning guest rooms to 71°F), Philips Hue lighting scenes ("Warm Welcome"), Schlage smart deadbolts (simulated access action using placeholder `SIMULATED-CODE-NOT-ISSUED`; no physical lock is contacted and no usable passcode is generated), and Roborock robot vacuums.
+> 3. **Simulated Alexa Shopping List API:** Updates client-side shopping list state with guest food preferences and bath amenities organized by grocery store aisle (local client-side state mutation; no external Amazon cloud sync).
+> 4. **Simulated Alexa Household Calendar:** Updates client-side calendar event state with arrival and departure windows and preparation buffers (local client-side state mutation; no external Google or Alexa calendar synchronization).
 
 ---
 
@@ -90,7 +90,7 @@ flowchart TD
     subgraph Persistence & UI
         CalModule & TaskModule & ShopModule & SmartHome & Inspector --> CentralStore[Central Household State]
         CentralStore --> LocalStorage[(Browser LocalStorage Engine)]
-        CentralStore --> UI[Reactive Glassmorphic Dashboard & Tabs]
+        CentralStore --> UI[Restrained Neutral Dashboard & Tabs]
         ToolDispatcher --> TraceLog[Live Execution Trace Inspector]
     end
 ```
@@ -108,7 +108,7 @@ flowchart TD
 | **🛒 Shopping List** | Department-sorted grocery and guest amenity checklist (Produce, Bakery, Dairy, Pantry, Amenities). | Aisle categorization, check off purchased items, validated add-item modal. |
 | **🏡 Smart Routines** | Simulated Alexa Smart Home integration orchestrating Ecobee thermostat, Philips Hue lights, simulated keypad pass, and Roborock vacuum. | Power toggles for scheduled routines, live device state telemetry derived directly from state. |
 | **⚡ Audit Trail** | Collapsible technical inspector with simulated latency, status codes, search, filter by tool family, and JSON copy with clipboard fallback. | Filter tools, copy payloads as JSON, verify state mutations. |
-| **🔄 Demo Reset** | Quick reset in the top header restoring clean initial seed state. | State reset with immediate interface synchronization and storage wipe. |
+| **🔄 Demo Reset** | Quick reset in the top header restoring clean initial seed state. | State reset with immediate interface update and storage reset. |
 
 ---
 
@@ -118,7 +118,7 @@ flowchart TD
 - **Bundler & Dev Server:** Vite 8
 - **Styling:** Vanilla CSS with restrained professional design tokens, warm neutral background (`#f8fafc`), white surfaces, dark slate typography, and ocean/slate blue accent (`#0284c7`). Fully responsive down to ~390px mobile viewports.
 - **Icons:** Lucide React (used deliberately and sparingly)
-- **Testing:** Vitest automated unit testing suite (39 tests)
+- **Testing:** Vitest automated unit testing suite (51 tests)
 - **Linter:** Oxlint (zero errors, zero warnings)
 - **Voice Output:** Native browser Web Speech API (`SpeechSynthesis`)
 
@@ -167,8 +167,8 @@ npm run lint
 
 ## 🧪 Automated Test Suite
 
-HomeHandoff includes 48 automated unit and regression tests across 4 test suites:
-- **`src/test/agentEngine.test.ts` (21 tests)**:
+HomeHandoff includes 51 automated unit and regression tests across 4 test suites:
+- **`src/test/agentEngine.test.ts` (23 tests)**:
   - **Scenario 1:** Verifies autonomous execution of 4 tools (`calendar.createEvent`, `tasks.batchCreate`, `shopping.addItems`, `routines.scheduleSmartHomeRoutine`), ensuring created entities are committed to the state store.
   - **Scenario 2:** Verifies context retention, event shifting to Saturday 5:00 PM, task deadline recalibration, and routine trigger updating to Saturday 3:30 PM.
   - **Scenario 3:** Verifies dynamic readiness calculation (0% initial, 40% after marking tasks completed, accurate incomplete task enumeration).
@@ -184,15 +184,18 @@ HomeHandoff includes 48 automated unit and regression tests across 4 test suites
   - **Ambiguity & Past Dates:** Handles ambiguous reschedule requests and dates in the past with helpful clarifications.
   - **Natural Language Tasks (`ADD_TASK`):** Validates conversational task creation with assignees and priorities.
   - **Task Deadline Integrity:** Verifies tasks created without explicit deadlines do not receive invented timestamps, tasks with deadlines accurately store valid dates, and impossible deadlines are strictly rejected.
+  - **Unrecognized Deadline Handling:** Verifies unrecognized or ambiguous deadline phrases (e.g. "in a fortnight", "deadline: soon") do not silently invent dates or embed deadline phrases into task titles, and prompts for clarification without executing tools or creating tasks.
+  - **Non-Temporal Preposition Distinctions:** Distinguishes non-deadline phrases (e.g. "by hand") and creates tasks without deadlines.
   - **Audit Trail Single Mutation:** Confirms tasks created via conversational requests record exactly one tool audit trace without duplication.
   - **Natural Language Calendar (`CREATE_CALENDAR_EVENT`):** Validates calendar event scheduling with date/time extraction.
   - **Demo Reset:** Tests clean reset of state and execution trace after all 3 guided scenarios.
-- **`src/test/dateUtils.test.ts` (20 tests)**:
+- **`src/test/dateUtils.test.ts` (21 tests)**:
   - Tests `getUpcomingDayOfWeek` for same-day future vs. past hour/minute boundaries, tomorrow vs. next week, and date formatting.
   - Tests `getRescheduledDateForPlan` to ensure visit dates never skip an extra week.
   - Tests `parseExplicitDate` for ISO, month-day, and day-month formats.
   - Tests `parseTaskDeadline` helper across ISO calendar dates, month names, relative days (tomorrow), and weekdays (Saturday at 5 PM).
   - Tests strict calendar validation rejecting impossible dates (Feb 31, April 31, non-leap year Feb 29) while accepting leap year Feb 29.
+  - Tests rejecting unsupported expressions such as "in a fortnight", "soon", or "before sunset" without pretending to understand them.
   - Tests 12-hour and 24-hour time component extraction.
   - Tests `findNextUpcomingEvent` deterministic calculation (empty, past-only, in-progress event, and nearest upcoming).
 - **`src/test/readiness.test.ts` (3 tests)**:

@@ -106,7 +106,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <span className="badge badge-neutral">Household Idle</span>
             <h2 className="welcome-heading">HomeHandoff Multi-Step Household Coordination</h2>
             <p className="welcome-body">
-              No active visit plan is currently running. All household calendars, tasks, and routines are synchronized.
+              No active visit plan is currently running. All household calendars, tasks, and routines are in their default state.
               To see autonomous multi-step planning in action, run Scenario 1 below or type an instruction in the Assistant tab.
             </p>
           </div>

@@ -79,7 +79,7 @@ export const ShoppingModule: React.FC<ShoppingModuleProps> = ({
           <h2 className="module-heading">Shopping List & Supplies</h2>
           <p className="module-subheading">
             {activePlanTitle 
-              ? `Synchronized with active plan: "${activePlanTitle}" (Simulated Alexa Shopping List API)` 
+              ? `Linked to active plan: "${activePlanTitle}" (Client Simulated Shopping List API)` 
               : 'Household groceries and guest hospitality amenities'}
           </p>
         </div>

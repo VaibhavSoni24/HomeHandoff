@@ -118,7 +118,7 @@ export function createInitialSeedState(): HouseholdState {
       {
         id: 'msg-seed-1',
         sender: 'assistant',
-        text: "Hi Vaibhav & Sarah! **HomeHandoff** (Alexa+ Household Agent) is online and synchronized with your home calendar, chore assignments, grocery list, and smart devices.\n\nTry giving me a natural instruction or tap one of the guided scenarios below to see multi-step coordination and autonomous tool execution in action!",
+        text: "Hi Vaibhav & Sarah! **HomeHandoff** (Alexa+ Household Agent) is online to coordinate your household calendar, chore assignments, grocery list, and smart home routines in this client simulation.\n\nTry giving me a natural instruction or tap one of the guided scenarios below to see multi-step coordination and autonomous tool execution in action!",
         timestamp: new Date().toISOString(),
         suggestedActions: [
           'My parents are visiting Friday. Prepare the house.',
