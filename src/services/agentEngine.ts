@@ -1,4 +1,4 @@
-import { 
+import type { 
   HouseholdState, 
   ToolCall, 
   Plan, 
@@ -29,7 +29,7 @@ export type RecognizedIntent =
   | 'CREATE_CALENDAR_EVENT'
   | 'GENERIC_HELP';
 
-export function classifyIntent(query: string, state: HouseholdState): { intent: RecognizedIntent; params: Record<string, any> } {
+export function classifyIntent(query: string, _state: HouseholdState): { intent: RecognizedIntent; params: Record<string, any> } {
   const q = query.trim().toLowerCase();
 
   // Scenario 2: Rescheduling arriving Saturday / 5pm / etc.
@@ -147,7 +147,6 @@ export function processUserMessage(rawQuery: string, currentState: HouseholdStat
  * SCENARIO 1: "My parents are visiting Friday. Prepare the house."
  */
 function handleScenario1ParentsVisit(state: HouseholdState): AgentExecutionResult {
-  const startTime = Date.now();
   const upcomingFriday = getUpcomingDayOfWeek(5, 18, 0); // Friday 6:00 PM
   const sundayDeparture = new Date(upcomingFriday);
   sundayDeparture.setDate(upcomingFriday.getDate() + 2);
@@ -494,7 +493,7 @@ Everything is live on your dashboard and ready for tracking.`;
 /**
  * SCENARIO 2: "Actually, they're arriving Saturday at 5 PM."
  */
-function handleScenario2RescheduleSaturday(state: HouseholdState, params: Record<string, any>): AgentExecutionResult {
+function handleScenario2RescheduleSaturday(state: HouseholdState, _params: Record<string, any>): AgentExecutionResult {
   const activePlan = state.activePlan;
   const newSaturdayDate = getUpcomingDayOfWeek(6, 17, 0); // Saturday 5:00 PM
   const newSundayDate = new Date(newSaturdayDate);
@@ -874,7 +873,7 @@ function handleAddShoppingItem(state: HouseholdState, itemName: string): AgentEx
 /**
  * Handle generic query / help
  */
-function handleGenericHelp(state: HouseholdState, query: string): AgentExecutionResult {
+function handleGenericHelp(state: HouseholdState, _query: string): AgentExecutionResult {
   const assistantMessage: ChatMessage = {
     id: `msg-asst-${Date.now()}`,
     sender: 'assistant',

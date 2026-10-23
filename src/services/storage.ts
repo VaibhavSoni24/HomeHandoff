@@ -1,4 +1,4 @@
-import { HouseholdState } from '../types/household';
+import type { HouseholdState } from '../types/household';
 import { createInitialSeedState } from '../data/seedData';
 
 const STORAGE_KEY = 'homehandoff_state_v1';

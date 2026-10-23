@@ -1,4 +1,4 @@
-import { HouseholdState } from '../types/household';
+import type { HouseholdState } from '../types/household';
 import { getUpcomingDayOfWeek } from '../utils/dateUtils';
 
 export function createInitialSeedState(): HouseholdState {
