@@ -256,7 +256,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         {task.priority.toUpperCase()}
                       </span>
                       <span className="task-time-estimate">{task.estimatedMinutes} mins</span>
-                      <span className="task-due-date">Due: {formatDateTime(task.dueDate)}</span>
+                      <span className="task-due-date">{task.dueDate ? `Due: ${formatDateTime(task.dueDate)}` : 'No due date'}</span>
                     </div>
                   </div>
                 </label>

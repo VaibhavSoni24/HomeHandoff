@@ -3,6 +3,7 @@ import {
   getUpcomingDayOfWeek, 
   getRescheduledDateForPlan, 
   parseExplicitDate,
+  parseTaskDeadline,
   formatDateTime, 
   formatTimeOnly, 
   formatDateShort 
@@ -217,3 +218,42 @@ describe('dateUtils: findNextUpcomingEvent deterministic calculation', () => {
     expect(result?.isInProgress).toBe(false);
   });
 });
+
+describe('dateUtils: parseTaskDeadline helper', () => {
+  const refTime = new Date(2026, 9, 23, 10, 0, 0, 0); // Friday Oct 23, 2026 10:00 AM
+
+  it('parses explicit calendar date deadlines', () => {
+    const parsed = parseTaskDeadline('November 14, 2026 at 5 PM', refTime);
+    expect(parsed?.date).toBeDefined();
+    expect(parsed?.date?.getFullYear()).toBe(2026);
+    expect(parsed?.date?.getMonth()).toBe(10);
+    expect(parsed?.date?.getDate()).toBe(14);
+    expect(parsed?.date?.getHours()).toBe(17);
+  });
+
+  it('parses relative tomorrow deadline with explicit time', () => {
+    const parsed = parseTaskDeadline('tomorrow at 3 PM', refTime);
+    expect(parsed?.date).toBeDefined();
+    expect(parsed?.date?.getDate()).toBe(24); // Day after Oct 23
+    expect(parsed?.date?.getHours()).toBe(15);
+  });
+
+  it('parses weekday deadlines like Saturday at 5 PM', () => {
+    const parsed = parseTaskDeadline('Saturday at 5 PM', refTime);
+    expect(parsed?.date).toBeDefined();
+    expect(parsed?.date?.getDay()).toBe(6);
+    expect(parsed?.date?.getHours()).toBe(17);
+  });
+
+  it('detects and flags impossible dates strictly', () => {
+    const parsed = parseTaskDeadline('Feb 31 at 5 PM', refTime);
+    expect(parsed?.isImpossible).toBe(true);
+    expect(parsed?.impossibleDescription).toContain('Feb 31');
+  });
+
+  it('returns null for plain non-date text', () => {
+    expect(parseTaskDeadline('by hand', refTime)).toBeNull();
+    expect(parseTaskDeadline('assigned to Sarah', refTime)).toBeNull();
+  });
+});
+

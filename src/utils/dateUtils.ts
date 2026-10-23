@@ -258,6 +258,81 @@ export function parseExplicitDate(
   return null;
 }
 
+export interface ParsedTaskDeadlineResult {
+  date?: Date;
+  isImpossible?: boolean;
+  impossibleDescription?: string;
+}
+
+/**
+ * Parses an explicit task deadline from a natural language string.
+ * Supports:
+ * - Detecting impossible calendar dates (e.g. Feb 31, April 31)
+ * - ISO calendar dates (e.g. 2026-11-14)
+ * - Month-day and day-month calendar dates (e.g. Nov 14, November 14, 2026 at 5 PM)
+ * - Relative keywords like "tomorrow [at HH:MM]", "today [at HH:MM]"
+ * - Weekday names (e.g. "Saturday at 5 PM", "Friday 15:00")
+ * 
+ * Returns null if the string contains no recognized date expression.
+ */
+export function parseTaskDeadline(
+  text: string,
+  referenceDate: Date = new Date(),
+  defaultHour = 17,
+  defaultMinute = 0
+): ParsedTaskDeadlineResult | null {
+  if (!text || !text.trim()) return null;
+  const trimmed = text.trim();
+
+  // 1. Detect impossible dates
+  const impossible = detectImpossibleDate(trimmed, referenceDate.getFullYear());
+  if (impossible.isImpossible) {
+    return {
+      isImpossible: true,
+      impossibleDescription: impossible.description
+    };
+  }
+
+  // 2. Try explicit calendar date (ISO / Month Day / Day Month)
+  const explicitDate = parseExplicitDate(trimmed, referenceDate, defaultHour, defaultMinute);
+  if (explicitDate) {
+    return { date: explicitDate };
+  }
+
+  // 3. Check for "tomorrow"
+  if (/\btomorrow\b/i.test(trimmed)) {
+    const time = extractExplicitTime(trimmed) || { hour: defaultHour, minute: defaultMinute };
+    const target = new Date(referenceDate);
+    target.setDate(referenceDate.getDate() + 1);
+    target.setHours(time.hour, time.minute, 0, 0);
+    return { date: target };
+  }
+
+  // 4. Check for "today"
+  if (/\btoday\b/i.test(trimmed)) {
+    const time = extractExplicitTime(trimmed);
+    if (time) {
+      const target = new Date(referenceDate);
+      target.setHours(time.hour, time.minute, 0, 0);
+      return { date: target };
+    }
+  }
+
+  // 5. Check for weekdays (monday - sunday)
+  const weekdayMatch = trimmed.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i);
+  if (weekdayMatch) {
+    const dayMap: Record<string, number> = {
+      sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6
+    };
+    const targetDay = dayMap[weekdayMatch[1].toLowerCase()];
+    const time = extractExplicitTime(trimmed) || { hour: defaultHour, minute: defaultMinute };
+    const target = getUpcomingDayOfWeek(targetDay, time.hour, time.minute, referenceDate);
+    return { date: target };
+  }
+
+  return null;
+}
+
 export interface NextUpcomingEventResult {
   event: CalendarEvent;
   isInProgress: boolean;
@@ -298,7 +373,8 @@ export function findNextUpcomingEvent(
   };
 }
 
-export function formatDateTime(isoString: string): string {
+export function formatDateTime(isoString?: string | null): string {
+  if (!isoString) return 'No due date';
   try {
     const d = new Date(isoString);
     if (isNaN(d.getTime())) return isoString;
@@ -315,35 +391,38 @@ export function formatDateTime(isoString: string): string {
   }
 }
 
-export function formatDateShort(isoString: string): string {
+export function formatDateShort(isoString?: string | null): string {
+  if (!isoString) return '';
   try {
     const d = new Date(isoString);
-    if (isNaN(d.getTime())) return isoString;
+    if (isNaN(d.getTime())) return '';
     return d.toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
     });
   } catch {
-    return isoString;
+    return '';
   }
 }
 
-export function formatTimeOnly(isoString: string): string {
+export function formatTimeOnly(isoString?: string | null): string {
+  if (!isoString) return '';
   try {
     const d = new Date(isoString);
-    if (isNaN(d.getTime())) return isoString;
+    if (isNaN(d.getTime())) return '';
     return d.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
     });
   } catch {
-    return isoString;
+    return '';
   }
 }
 
-export function getRelativeTimeLabel(isoString: string, baseNow = Date.now()): string {
+export function getRelativeTimeLabel(isoString?: string | null, baseNow = Date.now()): string {
+  if (!isoString) return '';
   try {
     const target = new Date(isoString).getTime();
     if (isNaN(target)) return '';
@@ -361,3 +440,4 @@ export function getRelativeTimeLabel(isoString: string, baseNow = Date.now()): s
     return '';
   }
 }
+

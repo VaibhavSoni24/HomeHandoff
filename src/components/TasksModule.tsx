@@ -61,7 +61,7 @@ export const TasksModule: React.FC<TasksModuleProps> = ({
       return;
     }
 
-    let dueDateIso = new Date().toISOString();
+    let dueDateIso: string | undefined = undefined;
     if (newDueDate) {
       const parsedDate = new Date(newDueDate);
       if (isNaN(parsedDate.getTime())) {
@@ -76,7 +76,7 @@ export const TasksModule: React.FC<TasksModuleProps> = ({
       category: newCategory,
       assignee: newAssignee,
       priority: newPriority,
-      dueDate: dueDateIso,
+      ...(dueDateIso ? { dueDate: dueDateIso } : {}),
       completed: false,
       estimatedMinutes: mins
     });
@@ -206,7 +206,7 @@ export const TasksModule: React.FC<TasksModuleProps> = ({
                       </span>
 
                       <span className="meta-due">
-                        Due: {formatDateTime(task.dueDate)}
+                        {task.dueDate ? `Due: ${formatDateTime(task.dueDate)}` : 'No due date'}
                       </span>
                     </div>
 

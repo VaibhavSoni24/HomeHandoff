@@ -167,8 +167,8 @@ npm run lint
 
 ## 🧪 Automated Test Suite
 
-HomeHandoff includes 39 automated unit and regression tests across 4 test suites:
-- **`src/test/agentEngine.test.ts` (17 tests)**:
+HomeHandoff includes 48 automated unit and regression tests across 4 test suites:
+- **`src/test/agentEngine.test.ts` (21 tests)**:
   - **Scenario 1:** Verifies autonomous execution of 4 tools (`calendar.createEvent`, `tasks.batchCreate`, `shopping.addItems`, `routines.scheduleSmartHomeRoutine`), ensuring created entities are committed to the state store.
   - **Scenario 2:** Verifies context retention, event shifting to Saturday 5:00 PM, task deadline recalibration, and routine trigger updating to Saturday 3:30 PM.
   - **Scenario 3:** Verifies dynamic readiness calculation (0% initial, 40% after marking tasks completed, accurate incomplete task enumeration).
@@ -183,12 +183,15 @@ HomeHandoff includes 39 automated unit and regression tests across 4 test suites
   - **Impossible Date Rejection:** Rejects impossible dates (e.g., February 31) without crashing or JavaScript date rollover.
   - **Ambiguity & Past Dates:** Handles ambiguous reschedule requests and dates in the past with helpful clarifications.
   - **Natural Language Tasks (`ADD_TASK`):** Validates conversational task creation with assignees and priorities.
+  - **Task Deadline Integrity:** Verifies tasks created without explicit deadlines do not receive invented timestamps, tasks with deadlines accurately store valid dates, and impossible deadlines are strictly rejected.
+  - **Audit Trail Single Mutation:** Confirms tasks created via conversational requests record exactly one tool audit trace without duplication.
   - **Natural Language Calendar (`CREATE_CALENDAR_EVENT`):** Validates calendar event scheduling with date/time extraction.
   - **Demo Reset:** Tests clean reset of state and execution trace after all 3 guided scenarios.
-- **`src/test/dateUtils.test.ts` (15 tests)**:
+- **`src/test/dateUtils.test.ts` (20 tests)**:
   - Tests `getUpcomingDayOfWeek` for same-day future vs. past hour/minute boundaries, tomorrow vs. next week, and date formatting.
   - Tests `getRescheduledDateForPlan` to ensure visit dates never skip an extra week.
   - Tests `parseExplicitDate` for ISO, month-day, and day-month formats.
+  - Tests `parseTaskDeadline` helper across ISO calendar dates, month names, relative days (tomorrow), and weekdays (Saturday at 5 PM).
   - Tests strict calendar validation rejecting impossible dates (Feb 31, April 31, non-leap year Feb 29) while accepting leap year Feb 29.
   - Tests 12-hour and 24-hour time component extraction.
   - Tests `findNextUpcomingEvent` deterministic calculation (empty, past-only, in-progress event, and nearest upcoming).

@@ -30,7 +30,7 @@ export interface Task {
   title: string;
   category: TaskCategory;
   assignee: string;
-  dueDate: string; // ISO string
+  dueDate?: string; // ISO string, or omitted if no deadline
   priority: TaskPriority;
   completed: boolean;
   estimatedMinutes: number;

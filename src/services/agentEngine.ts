@@ -14,6 +14,7 @@ import {
   getRescheduledDateForPlan, 
   parseExplicitDate,
   detectImpossibleDate,
+  parseTaskDeadline,
   formatDateTime, 
   formatDateShort,
   formatTimeOnly
@@ -42,8 +43,39 @@ export function classifyIntent(query: string, state: HouseholdState): { intent: 
   const q = query.trim().toLowerCase();
 
   // 0. Check for impossible calendar date (e.g., Feb 31, April 31)
-  const impossibleCheck = detectImpossibleDate(q);
+  const impossibleCheck = detectImpossibleDate(query);
   if (impossibleCheck.isImpossible) {
+    if (
+      q.startsWith('add task') || 
+      q.startsWith('create task') || 
+      q.startsWith('new task') || 
+      q.startsWith('add chore') || 
+      q.startsWith('create chore')
+    ) {
+      return {
+        intent: 'ADD_TASK',
+        params: {
+          hasImpossibleDate: true,
+          impossibleDateDescription: impossibleCheck.description
+        }
+      };
+    }
+
+    if (
+      q.startsWith('create event') || 
+      q.startsWith('schedule event') || 
+      q.startsWith('add event') || 
+      q.startsWith('book event')
+    ) {
+      return {
+        intent: 'CREATE_CALENDAR_EVENT',
+        params: {
+          hasImpossibleDate: true,
+          impossibleDateDescription: impossibleCheck.description
+        }
+      };
+    }
+
     return {
       intent: 'SCENARIO_2_RESCHEDULE_SATURDAY',
       params: {
@@ -205,7 +237,19 @@ export function classifyIntent(query: string, state: HouseholdState): { intent: 
       };
     }
 
-    // Extract optional assignee: e.g. "assigned to Sarah", "for Vaibhav", "by Sarah"
+    // Step 1: Detect impossible date anywhere in the task request
+    const impossibleCheck = detectImpossibleDate(taskBody);
+    if (impossibleCheck.isImpossible) {
+      return {
+        intent: 'ADD_TASK',
+        params: {
+          hasImpossibleDate: true,
+          impossibleDateDescription: impossibleCheck.description
+        }
+      };
+    }
+
+    // Step 2: Extract optional assignee: e.g. "assigned to Sarah", "for Vaibhav", "by Sarah"
     let assignee = 'Shared';
     const assigneeMatch = taskBody.match(/\s+(?:assigned to|for|by)\s+(sarah|vaibhav|guest room)\b/i);
     if (assigneeMatch) {
@@ -213,17 +257,77 @@ export function classifyIntent(query: string, state: HouseholdState): { intent: 
       if (rawAssignee === 'sarah') assignee = 'Sarah';
       else if (rawAssignee === 'vaibhav') assignee = 'Vaibhav';
       else if (rawAssignee.includes('guest')) assignee = 'Guest Room (Parents)';
-      taskBody = taskBody.replace(assigneeMatch[0], '').trim();
+      taskBody = taskBody.replace(assigneeMatch[0], ' ').trim();
     }
 
-    // Extract optional priority
+    // Step 3: Extract optional priority
     let priority: 'high' | 'medium' | 'low' = 'medium';
     if (/\b(urgent|high priority|priority high)\b/i.test(taskBody)) {
       priority = 'high';
-      taskBody = taskBody.replace(/\b(urgent|high priority|priority high)\b/i, '').trim();
+      taskBody = taskBody.replace(/\b(urgent|high priority|priority high)\b/i, ' ').trim();
     } else if (/\b(low priority|priority low)\b/i.test(taskBody)) {
       priority = 'low';
-      taskBody = taskBody.replace(/\b(low priority|priority low)\b/i, '').trim();
+      taskBody = taskBody.replace(/\b(low priority|priority low)\b/i, ' ').trim();
+    }
+
+    // Step 4: Extract optional deadline
+    let dueDateIso: string | undefined = undefined;
+
+    // A. Check for explicit deadline indicator (e.g. "due [date/on/by/at]?", "by", "before", "deadline:?")
+    const deadlinePattern = /(?:\s+(?:due(?:\s+(?:date|on|by|at))?|by|before|deadline:?))\s+([A-Za-z0-9,:\s-]+)$/i;
+    const deadlineMatch = taskBody.match(deadlinePattern);
+
+    if (deadlineMatch) {
+      const candidateStr = deadlineMatch[1].trim();
+      const parsedDeadline = parseTaskDeadline(candidateStr);
+      if (parsedDeadline) {
+        if (parsedDeadline.isImpossible) {
+          return {
+            intent: 'ADD_TASK',
+            params: {
+              hasImpossibleDate: true,
+              impossibleDateDescription: parsedDeadline.impossibleDescription
+            }
+          };
+        }
+        if (parsedDeadline.date) {
+          dueDateIso = parsedDeadline.date.toISOString();
+          taskBody = taskBody.replace(deadlineMatch[0], '').trim();
+        }
+      }
+    } else {
+      // B. Check if task ends with "on <date/weekday>" (e.g. "on Nov 14 at 5 PM", "on Saturday at 5 PM")
+      const onDatePattern = /\s+on\s+([A-Za-z0-9,:\s-]+)$/i;
+      const onMatch = taskBody.match(onDatePattern);
+      if (onMatch) {
+        const candidateStr = onMatch[1].trim();
+        const parsedDeadline = parseTaskDeadline(candidateStr);
+        if (parsedDeadline) {
+          if (parsedDeadline.isImpossible) {
+            return {
+              intent: 'ADD_TASK',
+              params: {
+                hasImpossibleDate: true,
+                impossibleDateDescription: parsedDeadline.impossibleDescription
+              }
+            };
+          }
+          if (parsedDeadline.date) {
+            dueDateIso = parsedDeadline.date.toISOString();
+            taskBody = taskBody.replace(onMatch[0], '').trim();
+          }
+        }
+      }
+    }
+
+    // Clean up any stray punctuation or whitespace
+    taskBody = taskBody.replace(/^[:,\s]+|[:,\s]+$/g, '').trim();
+
+    if (!taskBody) {
+      return {
+        intent: 'ADD_TASK',
+        params: { needsTitle: true }
+      };
     }
 
     return {
@@ -231,7 +335,8 @@ export function classifyIntent(query: string, state: HouseholdState): { intent: 
       params: {
         title: taskBody,
         assignee,
-        priority
+        priority,
+        dueDate: dueDateIso
       }
     };
   }
@@ -1013,6 +1118,27 @@ All changes have been synchronized across your household state.`;
  * Handle natural language task addition
  */
 function handleAddTask(state: HouseholdState, params: Record<string, any>): AgentExecutionResult {
+  if (params.hasImpossibleDate) {
+    const assistantMessage: ChatMessage = {
+      id: `msg-asst-${Date.now()}`,
+      sender: 'assistant',
+      text: `"${params.impossibleDateDescription || 'The specified date'}" is not a valid calendar date. Please specify a valid date (for example, February 28 or March 1) to set a task deadline.`,
+      timestamp: new Date().toISOString(),
+      suggestedActions: [
+        'Add task: Clean the patio furniture',
+        'View Chores & Tasks'
+      ]
+    };
+    return {
+      nextState: {
+        ...state,
+        chatHistory: [...state.chatHistory, assistantMessage]
+      },
+      responseMessage: assistantMessage,
+      executedTools: []
+    };
+  }
+
   if (params.needsTitle || !params.title) {
     const assistantMessage: ChatMessage = {
       id: `msg-asst-${Date.now()}`,
@@ -1036,9 +1162,7 @@ function handleAddTask(state: HouseholdState, params: Record<string, any>): Agen
   }
 
   const activePlanId = state.activePlan?.id;
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(17, 0, 0, 0);
+  const dueDate: string | undefined = params.dueDate;
 
   const newTask: Task = {
     id: `task-custom-${Date.now()}`,
@@ -1046,27 +1170,32 @@ function handleAddTask(state: HouseholdState, params: Record<string, any>): Agen
     title: params.title,
     category: 'general',
     assignee: params.assignee || 'Shared',
-    dueDate: tomorrow.toISOString(),
+    ...(dueDate ? { dueDate } : {}),
     priority: params.priority || 'medium',
     completed: false,
     estimatedMinutes: 25,
     notes: 'Created via conversational assistant'
   };
 
+  const deadlineConfirmation = newTask.dueDate
+    ? `due: ${formatDateTime(newTask.dueDate)}`
+    : 'no deadline assigned';
+
   const toolCall: ToolCall = {
     id: `tool-${Date.now()}-task-create`,
     timestamp: new Date().toISOString(),
     toolName: 'tasks.createTask',
-    description: `Created new task: "${newTask.title}" (assigned to ${newTask.assignee})`,
+    description: `Created new task: "${newTask.title}" (assigned to ${newTask.assignee}, ${deadlineConfirmation})`,
     input: {
       title: newTask.title,
       assignee: newTask.assignee,
       priority: newTask.priority,
-      due: newTask.dueDate
+      due: newTask.dueDate || 'None'
     },
     output: {
       taskId: newTask.id,
       status: 'created',
+      dueDate: newTask.dueDate || null,
       simulatedLatencyMs: 24
     },
     status: 'success',
@@ -1076,7 +1205,7 @@ function handleAddTask(state: HouseholdState, params: Record<string, any>): Agen
   const assistantMessage: ChatMessage = {
     id: `msg-asst-${Date.now()}`,
     sender: 'assistant',
-    text: `Created task **"${newTask.title}"** (assigned to **${newTask.assignee}**, priority: ${newTask.priority}).`,
+    text: `Created task **"${newTask.title}"** (assigned to **${newTask.assignee}**, priority: ${newTask.priority}, ${deadlineConfirmation}).`,
     timestamp: new Date().toISOString(),
     toolCalls: [toolCall],
     suggestedActions: [

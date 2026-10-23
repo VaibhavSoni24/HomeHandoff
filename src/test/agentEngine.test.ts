@@ -78,7 +78,7 @@ describe('HomeHandoff Agent Engine & Tool Execution', () => {
     const planTasks = step2.nextState.tasks.filter(t => t.planId === step2.nextState.activePlan?.id);
     expect(planTasks.length).toBe(5);
     for (const task of planTasks) {
-      const taskDue = new Date(task.dueDate);
+      const taskDue = new Date(task.dueDate!);
       expect(taskDue.getDay()).toBe(6); // Saturday
     }
 
@@ -317,16 +317,16 @@ describe('HomeHandoff Agent Engine & Tool Execution', () => {
     expect(planTasks.length).toBe(5);
 
     const bedroomTask = planTasks.find(t => t.title.includes('bedroom'));
-    expect(new Date(bedroomTask!.dueDate).getDate()).toBe(14);
-    expect(new Date(bedroomTask!.dueDate).getHours()).toBe(11); // Morning of arrival
+    expect(new Date(bedroomTask!.dueDate!).getDate()).toBe(14);
+    expect(new Date(bedroomTask!.dueDate!).getHours()).toBe(11); // Morning of arrival
 
     const bathroomTask = planTasks.find(t => t.title.includes('bathroom'));
-    expect(new Date(bathroomTask!.dueDate).getDate()).toBe(14);
-    expect(new Date(bathroomTask!.dueDate).getHours()).toBe(13); // Midday of arrival
+    expect(new Date(bathroomTask!.dueDate!).getDate()).toBe(14);
+    expect(new Date(bathroomTask!.dueDate!).getHours()).toBe(13); // Midday of arrival
 
     const groceryTask = planTasks.find(t => t.title.includes('groceries'));
-    expect(new Date(groceryTask!.dueDate).getDate()).toBe(14);
-    expect(new Date(groceryTask!.dueDate).getHours()).toBe(14); // 3h before 5 PM arrival
+    expect(new Date(groceryTask!.dueDate!).getDate()).toBe(14);
+    expect(new Date(groceryTask!.dueDate!).getHours()).toBe(14); // 3h before 5 PM arrival
 
     // Check routine trigger updated to 90 mins before (3:30 PM)
     const welcomeRoutine = step2.nextState.routines.find(r => r.name.includes('Parents'));
@@ -397,20 +397,92 @@ describe('HomeHandoff Agent Engine & Tool Execution', () => {
     expect(pastResult.responseMessage.text.toLowerCase()).toContain('in the past');
   });
 
-  it('ADD_TASK intent: Creates task from natural language with assignee and priority, asks if title missing', () => {
+  it('ADD_TASK intent: Creates task without deadline and verifies it does NOT receive an invented timestamp', () => {
     const initialState = createInitialSeedState();
 
-    // 1. Missing title
+    // 1. Missing title asks for title
     const missingTitleResult = processUserMessage('Add task', initialState);
     expect(missingTitleResult.executedTools.length).toBe(0);
     expect(missingTitleResult.responseMessage.text.toLowerCase()).toContain('specify a title');
 
-    // 2. Valid task creation
+    // 2. Task without deadline: must NOT invent tomorrow 5 PM
     const taskResult = processUserMessage('Add task: Clean the patio furniture assigned to Sarah', initialState);
     expect(taskResult.executedTools.length).toBe(1);
     expect(taskResult.executedTools[0].toolName).toBe('tasks.createTask');
     expect(taskResult.nextState.tasks[0].title).toBe('Clean the patio furniture');
     expect(taskResult.nextState.tasks[0].assignee).toBe('Sarah');
+    expect(taskResult.nextState.tasks[0].dueDate).toBeUndefined();
+    expect(taskResult.responseMessage.text.toLowerCase()).toContain('no deadline assigned');
+    expect(taskResult.executedTools[0].input.due).toBe('None');
+  });
+
+  it('ADD_TASK intent: Creates task with an explicit valid deadline', () => {
+    const initialState = createInitialSeedState();
+    const taskResult = processUserMessage(
+      'Add task: Clean the patio furniture due November 14, 2026 at 5 PM assigned to Sarah',
+      initialState
+    );
+    expect(taskResult.executedTools.length).toBe(1);
+    expect(taskResult.executedTools[0].toolName).toBe('tasks.createTask');
+    const createdTask = taskResult.nextState.tasks[0];
+    expect(createdTask.title).toBe('Clean the patio furniture');
+    expect(createdTask.assignee).toBe('Sarah');
+    expect(createdTask.dueDate).toBeDefined();
+    const due = new Date(createdTask.dueDate!);
+    expect(due.getFullYear()).toBe(2026);
+    expect(due.getMonth()).toBe(10); // November
+    expect(due.getDate()).toBe(14);
+    expect(due.getHours()).toBe(17);
+    expect(taskResult.responseMessage.text.toLowerCase()).toContain('due:');
+    expect(taskResult.responseMessage.text).toContain('Nov 14');
+  });
+
+  it('ADD_TASK intent: Rejects an impossible deadline without creating a task or successful tool call', () => {
+    const initialState = createInitialSeedState();
+    const taskResult = processUserMessage(
+      'Add task: Clean gutters by Feb 31 at 5 PM',
+      initialState
+    );
+    expect(taskResult.executedTools.length).toBe(0);
+    expect(taskResult.nextState.tasks.length).toBe(initialState.tasks.length);
+    expect(taskResult.responseMessage.text.toLowerCase()).toContain('not a valid calendar date');
+    expect(taskResult.responseMessage.text).toContain('Feb 31');
+  });
+
+  it('ADD_TASK intent: Preserves assignee and priority extraction alongside deadline', () => {
+    const initialState = createInitialSeedState();
+    const taskResult = processUserMessage(
+      'Create task: Replace water filter priority high for Vaibhav due 2026-11-20 at 10 AM',
+      initialState
+    );
+    expect(taskResult.executedTools.length).toBe(1);
+    const createdTask = taskResult.nextState.tasks[0];
+    expect(createdTask.title).toBe('Replace water filter');
+    expect(createdTask.assignee).toBe('Vaibhav');
+    expect(createdTask.priority).toBe('high');
+    expect(createdTask.completed).toBe(false);
+    const due = new Date(createdTask.dueDate!);
+    expect(due.getFullYear()).toBe(2026);
+    expect(due.getMonth()).toBe(10);
+    expect(due.getDate()).toBe(20);
+    expect(due.getHours()).toBe(10);
+  });
+
+  it('ADD_TASK intent: Correctly records the created task in the tool audit trail exactly once without duplicates', () => {
+    const initialState = createInitialSeedState();
+    const initialHistoryLength = initialState.toolHistory.length;
+    const taskResult = processUserMessage(
+      'Add task: Inspect electrical panel',
+      initialState
+    );
+    expect(taskResult.executedTools.length).toBe(1);
+    expect(taskResult.nextState.toolHistory.length).toBe(initialHistoryLength + 1);
+    const toolCall = taskResult.nextState.toolHistory[0];
+    expect(toolCall.toolName).toBe('tasks.createTask');
+    expect(toolCall.input.title).toBe('Inspect electrical panel');
+    // Ensure no duplicate entries for the tool call
+    const matches = taskResult.nextState.toolHistory.filter(t => t.id === toolCall.id);
+    expect(matches.length).toBe(1);
   });
 
   it('CREATE_CALENDAR_EVENT intent: Creates calendar event with explicit date/time, asks if details missing', () => {
