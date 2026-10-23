@@ -5,7 +5,8 @@ import {
   Clock, 
   User, 
   CheckCircle2, 
-  Sparkles
+  Sparkles,
+  AlertCircle
 } from 'lucide-react';
 import type { Task, TaskCategory, TaskPriority } from '../types/household';
 import { formatDateTime } from '../utils/dateUtils';
@@ -26,6 +27,7 @@ export const TasksModule: React.FC<TasksModuleProps> = ({
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'completed'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // New task form state
   const [newTitle, setNewTitle] = useState('');
@@ -47,20 +49,44 @@ export const TasksModule: React.FC<TasksModuleProps> = ({
 
   const handleCreateTask = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
+    setFormError(null);
+
+    const title = newTitle.trim();
+    if (!title) {
+      setFormError('Please enter a task description.');
+      return;
+    }
+
+    const mins = Number(newEstMinutes);
+    if (isNaN(mins) || mins <= 0 || mins > 480) {
+      setFormError('Estimated minutes must be a positive number between 1 and 480.');
+      return;
+    }
+
+    let dueDateIso = new Date().toISOString();
+    if (newDueDate) {
+      const parsedDate = new Date(newDueDate);
+      if (isNaN(parsedDate.getTime())) {
+        setFormError('Please select a valid due date and time.');
+        return;
+      }
+      dueDateIso = parsedDate.toISOString();
+    }
 
     onAddTask({
-      title: newTitle,
+      title,
       category: newCategory,
       assignee: newAssignee,
       priority: newPriority,
-      dueDate: newDueDate ? new Date(newDueDate).toISOString() : new Date().toISOString(),
+      dueDate: dueDateIso,
       completed: false,
-      estimatedMinutes: Number(newEstMinutes) || 15
+      estimatedMinutes: mins
     });
 
     setShowAddModal(false);
     setNewTitle('');
+    setNewDueDate('');
+    setFormError(null);
   };
 
   return (
@@ -104,7 +130,7 @@ export const TasksModule: React.FC<TasksModuleProps> = ({
             </button>
           </div>
 
-          <button className="primary-add-btn" onClick={() => setShowAddModal(true)}>
+          <button className="primary-add-btn" onClick={() => { setFormError(null); setShowAddModal(true); }}>
             <Plus size={16} />
             <span>Add Task</span>
           </button>
@@ -208,8 +234,15 @@ export const TasksModule: React.FC<TasksModuleProps> = ({
           <div className="modal-card glass-panel-elevated" onClick={e => e.stopPropagation()}>
             <h3 className="modal-title">Add Household Chore / Task</h3>
             <form onSubmit={handleCreateTask} className="modal-form">
+              {formError && (
+                <div className="form-error-banner" role="alert">
+                  <AlertCircle size={15} />
+                  <span>{formError}</span>
+                </div>
+              )}
+
               <div className="form-group">
-                <label>Task Description</label>
+                <label>Task Description *</label>
                 <input 
                   type="text" 
                   required 
@@ -253,11 +286,11 @@ export const TasksModule: React.FC<TasksModuleProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label>Est. Minutes</label>
+                  <label>Est. Minutes *</label>
                   <input 
                     type="number" 
-                    min="5" 
-                    max="180" 
+                    min="1" 
+                    max="480" 
                     value={newEstMinutes}
                     onChange={e => setNewEstMinutes(Number(e.target.value))}
                   />
@@ -265,7 +298,7 @@ export const TasksModule: React.FC<TasksModuleProps> = ({
               </div>
 
               <div className="form-group">
-                <label>Due Date & Time</label>
+                <label>Due Date & Time (Optional)</label>
                 <input 
                   type="datetime-local" 
                   value={newDueDate}

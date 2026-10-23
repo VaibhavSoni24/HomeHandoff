@@ -5,7 +5,8 @@ import {
   Plus, 
   Sparkles, 
   Layers, 
-  ShoppingBag
+  ShoppingBag,
+  AlertCircle
 } from 'lucide-react';
 import type { ShoppingItem, ShoppingCategory } from '../types/household';
 
@@ -49,22 +50,31 @@ export const ShoppingModule: React.FC<ShoppingModuleProps> = ({
     return item.category === filterCategory;
   });
 
+  const [formError, setFormError] = useState<string | null>(null);
+
   const handleCreateItem = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim()) return;
+    setFormError(null);
+
+    const name = newName.trim();
+    if (!name) {
+      setFormError('Please enter an item name.');
+      return;
+    }
 
     onAddItem({
-      name: newName,
+      name,
       category: newCategory,
-      quantity: newQuantity || '1',
+      quantity: newQuantity.trim() || '1',
       completed: false,
-      aisle: newAisle || `Aisle - ${newCategory}`,
+      aisle: newAisle.trim() || `Aisle - ${newCategory}`,
       priority: 'essential'
     });
 
     setShowAddModal(false);
     setNewName('');
     setNewAisle('');
+    setFormError(null);
   };
 
   return (
@@ -179,8 +189,14 @@ export const ShoppingModule: React.FC<ShoppingModuleProps> = ({
           <div className="modal-card glass-panel-elevated" onClick={e => e.stopPropagation()}>
             <h3 className="modal-title">Add Shopping / Grocery Item</h3>
             <form onSubmit={handleCreateItem} className="modal-form">
+              {formError && (
+                <div className="form-error-banner" role="alert">
+                  <AlertCircle size={15} />
+                  <span>{formError}</span>
+                </div>
+              )}
               <div className="form-group">
-                <label>Item Name</label>
+                <label>Item Name *</label>
                 <input 
                   type="text" 
                   required 

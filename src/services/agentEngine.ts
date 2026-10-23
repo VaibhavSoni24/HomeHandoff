@@ -10,6 +10,7 @@ import type {
   PlanSummary
 } from '../types/household';
 import { getUpcomingDayOfWeek, formatDateTime, formatDateShort } from '../utils/dateUtils';
+import { computePlanReadiness } from '../utils/readiness';
 
 export interface AgentExecutionResult {
   nextState: HouseholdState;
@@ -29,13 +30,38 @@ export type RecognizedIntent =
   | 'CREATE_CALENDAR_EVENT'
   | 'GENERIC_HELP';
 
-export function classifyIntent(query: string, _state: HouseholdState): { intent: RecognizedIntent; params: Record<string, any> } {
+export function classifyIntent(query: string, state: HouseholdState): { intent: RecognizedIntent; params: Record<string, any> } {
   const q = query.trim().toLowerCase();
 
-  // Scenario 2: Rescheduling arriving Saturday / 5pm / etc.
+  // 1. Scenario 2: Rescheduling arriving Saturday / 5pm / etc.
+  const hasRescheduleVerb = 
+    q.includes('actually') || 
+    q.includes('reschedule') || 
+    q.includes('postpone') || 
+    q.includes('delay') || 
+    q.includes('move to') || 
+    q.includes('moved to') ||
+    q.includes('change to') ||
+    q.includes('change arrival');
+
+  const hasSaturdayTarget = 
+    q.includes('saturday') || 
+    q.includes('sat at 5') || 
+    q.includes('sat 5pm') ||
+    q.includes('saturday at 5') ||
+    q.includes('saturday 5');
+
+  const hasArrivalSubject = 
+    q.includes('they') || 
+    q.includes('arrive') || 
+    q.includes('arriving') || 
+    q.includes('parents') || 
+    q.includes('coming');
+
   if (
-    (q.includes('actually') && (q.includes('saturday') || q.includes('5') || q.includes('arrive') || q.includes('arriving'))) ||
-    (q.includes('arriving saturday') || q.includes('arrive saturday') || q.includes('saturday at 5') || q.includes('saturday 5pm') || q.includes('saturday 5 pm') || q.includes('delay to saturday') || q.includes('move to saturday') || q.includes('reschedule to saturday'))
+    (hasRescheduleVerb && hasSaturdayTarget) ||
+    (hasSaturdayTarget && (hasArrivalSubject || q.includes('5 pm') || q.includes('5pm') || q.includes('5:00'))) ||
+    (q.includes('arriving saturday') || q.includes('arrive saturday') || q.includes('actually, they') || q.includes('actually they'))
   ) {
     return {
       intent: 'SCENARIO_2_RESCHEDULE_SATURDAY',
@@ -43,13 +69,14 @@ export function classifyIntent(query: string, _state: HouseholdState): { intent:
         day: 'Saturday',
         time: '5:00 PM',
         hour: 17,
-        minute: 0
+        minute: 0,
+        hasActivePlan: !!state.activePlan
       }
     };
   }
 
-  // Scenario 3: Query remaining items before arrival
-  if (
+  // 2. Scenario 3: Query remaining chores, readiness report, or prep status
+  const isStatusQuery = 
     q.includes('what still needs doing') ||
     q.includes('what needs doing') ||
     q.includes('what is left') ||
@@ -57,20 +84,48 @@ export function classifyIntent(query: string, _state: HouseholdState): { intent:
     q.includes('what still needs to be done') ||
     q.includes('status before they arrive') ||
     q.includes('readiness report') ||
+    q.includes('readiness score') ||
+    q.includes('how ready is the house') ||
     q.includes('remaining tasks') ||
     q.includes('checklist status') ||
-    (q.includes('needs doing') && q.includes('arrive'))
-  ) {
+    q.includes('preparation status') ||
+    ((q.includes('needs doing') || q.includes('left to do')) && (q.includes('arrive') || q.includes('arrival') || q.includes('visit') || q.includes('before')));
+
+  if (isStatusQuery) {
     return {
       intent: 'SCENARIO_3_STATUS_QUERY',
       params: {}
     };
   }
 
-  // Scenario 1: Parents visiting Friday / prepare house
+  // 3. Scenario 1: Parents / guests visiting Friday & prepare house
+  const hasGuestSubject = 
+    q.includes('parent') || 
+    q.includes('parents') || 
+    q.includes('mom and dad') || 
+    q.includes('in-law') || 
+    q.includes('inlaws') || 
+    q.includes('family') ||
+    q.includes('visitors') ||
+    q.includes('guests');
+
+  const hasVisitTiming = 
+    q.includes('friday') || 
+    q.includes('weekend') || 
+    q.includes('visiting') || 
+    q.includes('coming');
+
+  const hasPrepAction = 
+    q.includes('prepare') || 
+    q.includes('prep') || 
+    q.includes('get ready') || 
+    q.includes('organize') || 
+    q.includes('clean') ||
+    q.includes('plan');
+
   if (
-    (q.includes('parent') || q.includes('mom') || q.includes('dad') || q.includes('in-law') || q.includes('family')) &&
-    (q.includes('visiting') || q.includes('visit') || q.includes('coming') || q.includes('friday') || q.includes('prepare') || q.includes('prep') || q.includes('house'))
+    (hasGuestSubject && (hasVisitTiming || hasPrepAction)) ||
+    (q.includes('prepare the house') || q.includes('prepare house') || q.includes('parents are visiting') || q.includes('parents visit friday'))
   ) {
     return {
       intent: 'SCENARIO_1_PARENTS_VISIT',
@@ -81,21 +136,18 @@ export function classifyIntent(query: string, _state: HouseholdState): { intent:
     };
   }
 
-  // Quick fallback: if user types "prepare house" or "parents visit"
-  if (q.includes('prepare the house') || q.includes('prepare house') || q.includes('parents are visiting')) {
-    return {
-      intent: 'SCENARIO_1_PARENTS_VISIT',
-      params: { day: 'Friday', targetHour: 18 }
-    };
-  }
-
-  // Direct quick commands: Add shopping item
-  if (q.startsWith('add ') && (q.includes('to shopping') || q.includes('to groceries') || q.includes('to buy'))) {
-    const itemName = q.replace(/^add\s+/, '').replace(/\s+to\s+(shopping|groceries|buy).*/, '');
-    return {
-      intent: 'ADD_SHOPPING_ITEM',
-      params: { itemName }
-    };
+  // 4. Quick utility commands: Add shopping item
+  if (q.startsWith('add ') && (q.includes('to shopping') || q.includes('to groceries') || q.includes('to buy') || q.includes('to list'))) {
+    const itemName = q
+      .replace(/^add\s+/, '')
+      .replace(/\s+to\s+(shopping|groceries|buy|the\s+shopping|list).*/, '')
+      .trim();
+    if (itemName) {
+      return {
+        intent: 'ADD_SHOPPING_ITEM',
+        params: { itemName }
+      };
+    }
   }
 
   return {
@@ -136,7 +188,7 @@ export function processUserMessage(rawQuery: string, currentState: HouseholdStat
       return handleScenario3StatusQuery(stateWithUserMsg);
 
     case 'ADD_SHOPPING_ITEM':
-      return handleAddShoppingItem(stateWithUserMsg, params.itemName || 'Milk');
+      return handleAddShoppingItem(stateWithUserMsg, params.itemName || 'Fresh Milk');
 
     default:
       return handleGenericHelp(stateWithUserMsg, trimmed);
@@ -183,27 +235,19 @@ function handleScenario1ParentsVisit(state: HouseholdState): AgentExecutionResul
     output: {
       eventId: calendarEvent.id,
       status: 'created',
-      calendarSync: 'Simulated Alexa Calendar synced with Google Calendar'
+      calendarSync: 'Simulated Alexa Calendar synced with Google Calendar',
+      simulatedLatencyMs: 42
     },
     status: 'success',
     executionTimeMs: 42
   };
 
   // 2. Tool Call: tasks.batchCreate
-  const friMorning = new Date(upcomingFriday);
-  friMorning.setHours(11, 0, 0, 0);
-
-  const friNoon = new Date(upcomingFriday);
-  friNoon.setHours(13, 0, 0, 0);
-
-  const friAfternoon = new Date(upcomingFriday);
-  friAfternoon.setHours(15, 0, 0, 0);
-
-  const friLateAfternoon = new Date(upcomingFriday);
-  friLateAfternoon.setHours(16, 30, 0, 0);
-
-  const friPreArrival = new Date(upcomingFriday);
-  friPreArrival.setHours(17, 30, 0, 0);
+  const friMorning = new Date(upcomingFriday); friMorning.setHours(11, 0, 0, 0);
+  const friNoon = new Date(upcomingFriday); friNoon.setHours(13, 0, 0, 0);
+  const friAfternoon = new Date(upcomingFriday); friAfternoon.setHours(15, 0, 0, 0);
+  const friLateAfternoon = new Date(upcomingFriday); friLateAfternoon.setHours(16, 30, 0, 0);
+  const friPreArrival = new Date(upcomingFriday); friPreArrival.setHours(17, 30, 0, 0);
 
   const newTasks: Task[] = [
     {
@@ -281,7 +325,8 @@ function handleScenario1ParentsVisit(state: HouseholdState): AgentExecutionResul
     output: {
       createdTaskIds: newTasks.map(t => t.id),
       totalEstimatedTimeMinutes: 145,
-      status: 'scheduled'
+      status: 'scheduled',
+      simulatedLatencyMs: 65
     },
     status: 'success',
     executionTimeMs: 65
@@ -353,7 +398,8 @@ function handleScenario1ParentsVisit(state: HouseholdState): AgentExecutionResul
     output: {
       addedItemCount: newShoppingItems.length,
       syncProvider: 'Simulated Alexa Shopping List API',
-      status: 'active'
+      status: 'active',
+      simulatedLatencyMs: 38
     },
     status: 'success',
     executionTimeMs: 38
@@ -414,7 +460,8 @@ function handleScenario1ParentsVisit(state: HouseholdState): AgentExecutionResul
       routineId: newRoutine.id,
       scheduledTime: routineTriggerTime.toISOString(),
       service: 'Simulated Alexa Smart Home Skill API',
-      status: 'armed'
+      status: 'armed',
+      simulatedLatencyMs: 51
     },
     status: 'success',
     executionTimeMs: 51
@@ -468,7 +515,7 @@ Everything is live on your dashboard and ready for tracking.`;
     suggestedActions: [
       "Actually, they're arriving Saturday at 5 PM.",
       "What still needs doing before they arrive?",
-      "Mark guest room cleaning as done"
+      "View Chores & Tasks"
     ]
   };
 
@@ -495,24 +542,50 @@ Everything is live on your dashboard and ready for tracking.`;
  */
 function handleScenario2RescheduleSaturday(state: HouseholdState, _params: Record<string, any>): AgentExecutionResult {
   const activePlan = state.activePlan;
+
+  // Handle missing active plan gracefully
+  if (!activePlan) {
+    const assistantMessage: ChatMessage = {
+      id: `msg-asst-${Date.now()}`,
+      sender: 'assistant',
+      text: "I noticed you would like to reschedule an arrival, but there is no active visit plan currently in your household dashboard.\n\nWould you like me to create a preparation plan for your parents' visit first?",
+      timestamp: new Date().toISOString(),
+      suggestedActions: [
+        'My parents are visiting Friday. Prepare the house.',
+        'View Household Dashboard'
+      ]
+    };
+
+    return {
+      nextState: {
+        ...state,
+        chatHistory: [...state.chatHistory, assistantMessage]
+      },
+      responseMessage: assistantMessage,
+      executedTools: []
+    };
+  }
+
+  const planId = activePlan.id;
   const newSaturdayDate = getUpcomingDayOfWeek(6, 17, 0); // Saturday 5:00 PM
   const newSundayDate = new Date(newSaturdayDate);
   newSundayDate.setDate(newSaturdayDate.getDate() + 1);
   newSundayDate.setHours(18, 0, 0, 0);
 
-  const planId = activePlan ? activePlan.id : `plan-parents-fallback`;
-
   // 1. Tool Call: calendar.updateEvent
-  const targetEvent = state.events.find(e => e.planId === planId || e.title.toLowerCase().includes('parent'));
+  // Update ONLY the event associated with this active plan!
+  const targetEvent = state.events.find(
+    e => e.planId === planId || (activePlan.targetEventId && e.id === activePlan.targetEventId)
+  );
   const originalDateFormatted = targetEvent ? formatDateTime(targetEvent.start) : 'Friday 6:00 PM';
 
   const updatedEvents = state.events.map(e => {
-    if ((targetEvent && e.id === targetEvent.id) || e.planId === planId) {
+    if (e.planId === planId || (activePlan.targetEventId && e.id === activePlan.targetEventId)) {
       return {
         ...e,
         start: newSaturdayDate.toISOString(),
         end: newSundayDate.toISOString(),
-        notes: `${e.notes || ''} [Updated: arrival moved to Saturday 5:00 PM]`
+        notes: `${e.notes ? e.notes.replace(/\s*\[Updated:.*?\]/g, '') : ''} [Updated: arrival moved to Saturday 5:00 PM]`
       };
     }
     return e;
@@ -522,9 +595,9 @@ function handleScenario2RescheduleSaturday(state: HouseholdState, _params: Recor
     id: `tool-${Date.now()}-1`,
     timestamp: new Date().toISOString(),
     toolName: 'calendar.updateEvent',
-    description: `Shifted calendar event "Parents Weekend Visit" from ${originalDateFormatted} to ${formatDateTime(newSaturdayDate.toISOString())}`,
+    description: `Shifted calendar event "${targetEvent?.title || 'Parents Weekend Visit'}" from ${originalDateFormatted} to ${formatDateTime(newSaturdayDate.toISOString())}`,
     input: {
-      eventId: targetEvent?.id || 'evt-parents',
+      eventId: targetEvent?.id || activePlan.targetEventId,
       previousStart: targetEvent?.start,
       newStart: newSaturdayDate.toISOString(),
       newEnd: newSundayDate.toISOString()
@@ -532,43 +605,46 @@ function handleScenario2RescheduleSaturday(state: HouseholdState, _params: Recor
     output: {
       status: 'updated',
       deltaHours: 23,
-      calendarSync: 'Simulated Alexa Calendar synced with Google Calendar'
+      calendarSync: 'Simulated Alexa Calendar synced with Google Calendar',
+      simulatedLatencyMs: 46
     },
     status: 'success',
     executionTimeMs: 46
   };
 
   // 2. Tool Call: tasks.rescheduleAssociated
-  // Shift cleaning & logistics tasks to Saturday morning/afternoon so preparation stays fresh!
-  const satMorning = new Date(newSaturdayDate);
-  satMorning.setHours(11, 0, 0, 0);
+  // Shift ONLY tasks belonging to activePlan.id.
+  // PRESERVE completion status, category, assignee, notes, estimatedMinutes!
+  const satMorning = new Date(newSaturdayDate); satMorning.setHours(11, 0, 0, 0);
+  const satNoon = new Date(newSaturdayDate); satNoon.setHours(13, 0, 0, 0);
+  const satAfternoon = new Date(newSaturdayDate); satAfternoon.setHours(14, 0, 0, 0);
+  const satLateAfternoon = new Date(newSaturdayDate); satLateAfternoon.setHours(15, 30, 0, 0);
+  const satPreArrival = new Date(newSaturdayDate); satPreArrival.setHours(16, 0, 0, 0);
 
-  const satNoon = new Date(newSaturdayDate);
-  satNoon.setHours(13, 0, 0, 0);
-
-  const satAfternoon = new Date(newSaturdayDate);
-  satAfternoon.setHours(15, 0, 0, 0);
-
-  const satLateAfternoon = new Date(newSaturdayDate);
-  satLateAfternoon.setHours(16, 0, 0, 0);
-
+  let rescheduledCount = 0;
   const updatedTasks = state.tasks.map(t => {
-    if (t.planId === planId || t.title.toLowerCase().includes('guest') || t.title.toLowerCase().includes('parent')) {
-      let newDue = satAfternoon.toISOString();
-      if (t.category === 'guest_room') newDue = satMorning.toISOString();
-      if (t.category === 'groceries') newDue = satNoon.toISOString();
-      if (t.category === 'cleaning') newDue = satAfternoon.toISOString();
-      if (t.category === 'smart_home') newDue = satLateAfternoon.toISOString();
+    if (t.planId === planId) {
+      rescheduledCount++;
+      let newDue = satLateAfternoon.toISOString();
+
+      if (t.category === 'guest_room') {
+        newDue = t.title.toLowerCase().includes('bathroom') ? satNoon.toISOString() : satMorning.toISOString();
+      } else if (t.category === 'groceries') {
+        newDue = satAfternoon.toISOString();
+      } else if (t.category === 'cleaning') {
+        newDue = satLateAfternoon.toISOString();
+      } else if (t.category === 'smart_home') {
+        newDue = satPreArrival.toISOString();
+      }
 
       return {
         ...t,
         dueDate: newDue
+        // t.completed, t.estimatedMinutes, t.assignee, t.notes are fully preserved!
       };
     }
     return t;
   });
-
-  const rescheduledCount = updatedTasks.filter(t => t.planId === planId || t.title.toLowerCase().includes('guest') || t.title.toLowerCase().includes('parent')).length;
 
   const toolCall2: ToolCall = {
     id: `tool-${Date.now()}-2`,
@@ -583,18 +659,20 @@ function handleScenario2RescheduleSaturday(state: HouseholdState, _params: Recor
     output: {
       rescheduledCount,
       freshnessWindowPreserved: true,
-      groceryRunShiftedTo: formatDateTime(satNoon.toISOString())
+      groceryRunShiftedTo: formatDateTime(satAfternoon.toISOString()),
+      simulatedLatencyMs: 58
     },
     status: 'success',
     executionTimeMs: 58
   };
 
   // 3. Tool Call: routines.updateRoutineTrigger
+  // Update ONLY routines belonging to activePlan.id!
   const newRoutineTriggerTime = new Date(newSaturdayDate);
   newRoutineTriggerTime.setHours(15, 30, 0, 0); // 90 min before Saturday 5:00 PM
 
   const updatedRoutines = state.routines.map(r => {
-    if (r.planId === planId || r.name.toLowerCase().includes('parent')) {
+    if (r.planId === planId) {
       return {
         ...r,
         trigger: 'Saturday at 3:30 PM (90 mins before arrival)',
@@ -617,40 +695,40 @@ function handleScenario2RescheduleSaturday(state: HouseholdState, _params: Recor
     },
     output: {
       status: 'rescheduled',
-      deviceTarget: 'Thermostat 71°F, Hue Warm Welcome, Guest PIN activated Saturday afternoon'
+      deviceTarget: 'Thermostat 71°F, Hue Warm Welcome, Guest PIN activated Saturday afternoon',
+      simulatedLatencyMs: 34
     },
     status: 'success',
     executionTimeMs: 34
   };
 
-  // Update Plan milestones and targetDate
-  let updatedPlan: Plan | null = null;
-  if (activePlan) {
-    updatedPlan = {
-      ...activePlan,
-      targetDate: newSaturdayDate.toISOString(),
-      updatedAt: new Date().toISOString(),
-      milestones: activePlan.milestones.map(m => {
-        if (m.title.toLowerCase().includes('clean')) return { ...m, dueDate: satMorning.toISOString() };
-        if (m.title.toLowerCase().includes('grocer')) return { ...m, dueDate: satNoon.toISOString() };
-        if (m.title.toLowerCase().includes('routine') || m.title.toLowerCase().includes('smart')) return { ...m, dueDate: satLateAfternoon.toISOString() };
-        if (m.title.toLowerCase().includes('arrival')) return { ...m, dueDate: newSaturdayDate.toISOString() };
-        return m;
-      })
-    };
-  }
+  // Update Plan milestones and targetDate while preserving milestone completion status
+  const updatedPlan: Plan = {
+    ...activePlan,
+    targetDate: newSaturdayDate.toISOString(),
+    updatedAt: new Date().toISOString(),
+    milestones: activePlan.milestones.map(m => {
+      if (m.title.toLowerCase().includes('clean')) return { ...m, dueDate: satMorning.toISOString() };
+      if (m.title.toLowerCase().includes('grocer') || m.title.toLowerCase().includes('restock')) return { ...m, dueDate: satAfternoon.toISOString() };
+      if (m.title.toLowerCase().includes('routine') || m.title.toLowerCase().includes('smart')) return { ...m, dueDate: satLateAfternoon.toISOString() };
+      if (m.title.toLowerCase().includes('arrival')) return { ...m, dueDate: newSaturdayDate.toISOString() };
+      return m;
+    })
+  };
 
-  // Calculate readiness summary
-  const planTasks = updatedTasks.filter(t => t.planId === planId);
-  const completedCount = planTasks.filter(t => t.completed).length;
-  const readiness = planTasks.length > 0 ? Math.round((completedCount / planTasks.length) * 100) : 0;
+  // Calculate synchronized readiness summary
+  const readinessResult = computePlanReadiness({
+    ...state,
+    activePlan: updatedPlan,
+    tasks: updatedTasks
+  });
 
   const planSummary: PlanSummary = {
-    planTitle: updatedPlan ? updatedPlan.title : 'Parents Weekend Visit Preparation',
-    readinessScore: readiness,
-    completedTasks: completedCount,
-    totalTasks: planTasks.length,
-    nextMilestone: 'Deep Clean Guest Suite (Saturday 11:00 AM)',
+    planTitle: updatedPlan.title,
+    readinessScore: readinessResult.readinessPercent,
+    completedTasks: readinessResult.completedTasks,
+    totalTasks: readinessResult.totalTasks,
+    nextMilestone: readinessResult.nextMilestoneTitle || 'Deep Clean Guest Suite (Saturday 11:00 AM)',
     targetDateFormatted: formatDateTime(newSaturdayDate.toISOString())
   };
 
@@ -673,13 +751,13 @@ You now have an extra day of buffer!`;
     suggestedActions: [
       'What still needs doing before they arrive?',
       'Show my Saturday preparation timeline',
-      'Mark grocery shopping as completed'
+      'View Chores & Tasks'
     ]
   };
 
   const nextState: HouseholdState = {
     ...state,
-    activePlan: updatedPlan || state.activePlan,
+    activePlan: updatedPlan,
     events: updatedEvents,
     tasks: updatedTasks,
     routines: updatedRoutines,
@@ -699,36 +777,28 @@ You now have an extra day of buffer!`;
  */
 function handleScenario3StatusQuery(state: HouseholdState): AgentExecutionResult {
   const activePlan = state.activePlan;
-  const planId = activePlan ? activePlan.id : undefined;
+  const readinessResult = computePlanReadiness(state);
 
-  // 1. Tool Call: agent.inspectState
-  const relevantTasks = state.tasks.filter(t => 
-    (planId && t.planId === planId) || 
-    t.title.toLowerCase().includes('guest') || 
-    t.title.toLowerCase().includes('parent') ||
-    t.category === 'guest_room'
-  );
+  const relevantTasks = activePlan
+    ? state.tasks.filter(t => t.planId === activePlan.id)
+    : state.tasks;
 
   const completedTasks = relevantTasks.filter(t => t.completed);
   const pendingTasks = relevantTasks.filter(t => !t.completed);
 
-  const pendingShopping = state.shoppingItems.filter(s => 
-    (!s.completed) && 
-    ((planId && s.planId === planId) || s.category === 'Guest Amenities' || s.name.toLowerCase().includes('bread') || s.name.toLowerCase().includes('milk'))
-  );
+  const pendingShopping = activePlan
+    ? state.shoppingItems.filter(s => s.planId === activePlan.id && !s.completed)
+    : state.shoppingItems.filter(s => !s.completed);
 
   const targetDateStr = activePlan ? activePlan.targetDate : getUpcomingDayOfWeek(6, 17, 0).toISOString();
-  const readinessPercent = relevantTasks.length > 0 
-    ? Math.round((completedTasks.length / relevantTasks.length) * 100) 
-    : 40;
 
   const toolCall1: ToolCall = {
     id: `tool-${Date.now()}-1`,
     timestamp: new Date().toISOString(),
     toolName: 'agent.inspectState',
-    description: `Inspected state for active plan "${activePlan?.title || 'Parents Visit'}": evaluated ${relevantTasks.length} tasks and ${pendingShopping.length} shopping items`,
+    description: `Inspected state for active plan "${activePlan?.title || 'Household Overview'}": evaluated ${relevantTasks.length} tasks and ${pendingShopping.length} shopping items`,
     input: {
-      planId: activePlan?.id || 'all_guest_items',
+      planId: activePlan?.id || 'all_active_tasks',
       filter: 'pending_before_arrival',
       targetArrivalDate: targetDateStr
     },
@@ -737,7 +807,8 @@ function handleScenario3StatusQuery(state: HouseholdState): AgentExecutionResult
       completedTaskCount: completedTasks.length,
       pendingTaskCount: pendingTasks.length,
       pendingShoppingCount: pendingShopping.length,
-      readinessScorePercent: readinessPercent
+      readinessScorePercent: readinessResult.readinessPercent,
+      simulatedLatencyMs: 29
     },
     status: 'success',
     executionTimeMs: 29
@@ -757,7 +828,7 @@ function handleScenario3StatusQuery(state: HouseholdState): AgentExecutionResult
     breakdownText = `🎉 **Everything is complete!** All preparation tasks have been checked off. The house is 100% ready for arrival at ${formatDateTime(targetDateStr)}.`;
   } else {
     breakdownText = `Here is the current preparation status before arrival (**${formatDateTime(targetDateStr)}**):\n\n` +
-      `📊 **Readiness Score:** **${readinessPercent}%** (${completedTasks.length} of ${relevantTasks.length} tasks complete)\n\n` +
+      `📊 **Readiness Score:** **${readinessResult.readinessPercent}%** (${completedTasks.length} of ${relevantTasks.length} tasks complete)\n\n` +
       `### Incomplete Tasks by Household Member:\n`;
 
     for (const [assignee, tasks] of Object.entries(tasksByAssignee)) {
@@ -784,7 +855,7 @@ function handleScenario3StatusQuery(state: HouseholdState): AgentExecutionResult
 
   const planSummary: PlanSummary = {
     planTitle: activePlan?.title || 'Parents Weekend Visit Preparation',
-    readinessScore: readinessPercent,
+    readinessScore: readinessResult.readinessPercent,
     completedTasks: completedTasks.length,
     totalTasks: relevantTasks.length,
     nextMilestone: pendingTasks[0] ? pendingTasks[0].title : 'Parents Arrival & Welcome',
@@ -799,7 +870,7 @@ function handleScenario3StatusQuery(state: HouseholdState): AgentExecutionResult
     toolCalls: [toolCall1],
     planSummary,
     suggestedActions: [
-      pendingTasks[0] ? `Mark "${pendingTasks[0].title.slice(0, 30)}..." complete` : 'Check all tasks',
+      pendingTasks[0] ? `Mark "${pendingTasks[0].title.slice(0, 28)}..." complete` : 'Check all tasks',
       'Go to Shopping List',
       'View Calendar'
     ]
@@ -839,7 +910,7 @@ function handleAddShoppingItem(state: HouseholdState, itemName: string): AgentEx
     toolName: 'shopping.addItems',
     description: `Added "${itemName}" to household shopping list`,
     input: { name: itemName, category: 'Pantry', quantity: '1' },
-    output: { itemId: newItem.id, status: 'added' },
+    output: { itemId: newItem.id, status: 'added', simulatedLatencyMs: 25 },
     status: 'success',
     executionTimeMs: 25
   };
@@ -904,7 +975,7 @@ Here are the 3 main hackathon scenarios you can trigger:
 }
 
 /**
- * Direct task toggle mutation that also generates an execution trace if requested
+ * Direct task toggle mutation that also generates an execution trace
  */
 export function toggleTaskInState(state: HouseholdState, taskId: string): HouseholdState {
   let toggledTitle = '';
@@ -920,12 +991,12 @@ export function toggleTaskInState(state: HouseholdState, taskId: string): Househ
   });
 
   const toolCall: ToolCall = {
-    id: `tool-${Date.now()}-toggle`,
+    id: `tool-${Date.now()}-task-toggle`,
     timestamp: new Date().toISOString(),
     toolName: 'tasks.toggleComplete',
     description: `Toggled task completion for "${toggledTitle}" -> ${newStatus ? 'COMPLETED' : 'PENDING'}`,
     input: { taskId, targetCompleted: newStatus },
-    output: { taskId, completed: newStatus, status: 'updated' },
+    output: { taskId, completed: newStatus, status: 'updated', simulated: true },
     status: 'success',
     executionTimeMs: 18
   };
@@ -938,35 +1009,69 @@ export function toggleTaskInState(state: HouseholdState, taskId: string): Househ
 }
 
 /**
- * Direct shopping item toggle mutation
+ * Direct shopping item toggle mutation with consistent execution trace recording
  */
 export function toggleShoppingItemInState(state: HouseholdState, itemId: string): HouseholdState {
+  let toggledName = '';
+  let newStatus = false;
+
   const updatedItems = state.shoppingItems.map(item => {
     if (item.id === itemId) {
-      return { ...item, completed: !item.completed };
+      newStatus = !item.completed;
+      toggledName = item.name;
+      return { ...item, completed: newStatus };
     }
     return item;
   });
 
+  const toolCall: ToolCall = {
+    id: `tool-${Date.now()}-shop-toggle`,
+    timestamp: new Date().toISOString(),
+    toolName: 'shopping.toggleComplete',
+    description: `Toggled item "${toggledName}" -> ${newStatus ? 'PURCHASED' : 'PENDING'} (Simulated Alexa Shopping List API)`,
+    input: { itemId, targetCompleted: newStatus },
+    output: { itemId, completed: newStatus, status: 'updated', simulated: true },
+    status: 'success',
+    executionTimeMs: 15
+  };
+
   return {
     ...state,
-    shoppingItems: updatedItems
+    shoppingItems: updatedItems,
+    toolHistory: [toolCall, ...state.toolHistory]
   };
 }
 
 /**
- * Direct routine toggle mutation
+ * Direct routine toggle mutation with consistent execution trace recording
  */
 export function toggleRoutineInState(state: HouseholdState, routineId: string): HouseholdState {
+  let toggledName = '';
+  let newEnabled = false;
+
   const updatedRoutines = state.routines.map(r => {
     if (r.id === routineId) {
-      return { ...r, enabled: !r.enabled };
+      newEnabled = !r.enabled;
+      toggledName = r.name;
+      return { ...r, enabled: newEnabled };
     }
     return r;
   });
 
+  const toolCall: ToolCall = {
+    id: `tool-${Date.now()}-routine-toggle`,
+    timestamp: new Date().toISOString(),
+    toolName: 'routines.toggleRoutine',
+    description: `Toggled routine "${toggledName}" -> ${newEnabled ? 'ENABLED' : 'PAUSED'} (Simulated Alexa Smart Home Skills API)`,
+    input: { routineId, targetEnabled: newEnabled },
+    output: { routineId, enabled: newEnabled, status: 'updated', simulated: true },
+    status: 'success',
+    executionTimeMs: 20
+  };
+
   return {
     ...state,
-    routines: updatedRoutines
+    routines: updatedRoutines,
+    toolHistory: [toolCall, ...state.toolHistory]
   };
 }

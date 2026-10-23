@@ -49,7 +49,12 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Handle conversational query
+  const stateRef = React.useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  // Handle conversational query with state race protection and error recovery
   const handleSendMessage = (query: string) => {
     if (!query.trim() || isProcessing) return;
 
@@ -58,8 +63,9 @@ export const App: React.FC = () => {
     // Simulate subtle realistic processing latency for asynchronous tool orchestration
     setTimeout(() => {
       try {
-        const result = processUserMessage(query, state);
-        setState(result.nextState);
+        const currentState = stateRef.current;
+        const result = processUserMessage(query, currentState);
+        setState(() => result.nextState);
 
         // Voice output if enabled
         if (result.nextState.settings.voiceFeedback) {
@@ -68,12 +74,23 @@ export const App: React.FC = () => {
             setIsSpeaking(false);
           });
         }
-      } catch (err) {
+      } catch (err: unknown) {
         console.error('Agent execution error:', err);
+        const errorMessageText = err instanceof Error ? err.message : 'Unexpected processing error';
+        const errorMsg: { id: string; sender: 'system'; text: string; timestamp: string } = {
+          id: `msg-err-${Date.now()}`,
+          sender: 'system',
+          text: `⚠️ **Action Failed:** Could not process household coordination request (${errorMessageText}). Please try again or tap "Reset Demo".`,
+          timestamp: new Date().toISOString()
+        };
+        setState(prev => ({
+          ...prev,
+          chatHistory: [...prev.chatHistory, errorMsg]
+        }));
       } finally {
         setIsProcessing(false);
       }
-    }, 450);
+    }, 350);
   };
 
   // Toggle voice output setting

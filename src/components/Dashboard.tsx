@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import type { HouseholdState } from '../types/household';
 import { formatDateTime, getRelativeTimeLabel } from '../utils/dateUtils';
+import { computePlanReadiness } from '../utils/readiness';
 
 interface DashboardProps {
   state: HouseholdState;
@@ -25,17 +26,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onTriggerScenario
 }) => {
   const activePlan = state.activePlan;
-  const planTasks = state.tasks.filter(t => activePlan && t.planId === activePlan.id);
-  const completedPlanTasks = planTasks.filter(t => t.completed);
+  const readiness = computePlanReadiness(state);
   const totalTasks = state.tasks.length;
   const completedTotalTasks = state.tasks.filter(t => t.completed).length;
   const pendingTotalTasks = totalTasks - completedTotalTasks;
   const unpurchasedShopping = state.shoppingItems.filter(s => !s.completed).length;
   const armedRoutines = state.routines.filter(r => r.enabled).length;
 
-  const readinessPercent = planTasks.length > 0 
-    ? Math.round((completedPlanTasks.length / planTasks.length) * 100) 
-    : (activePlan ? 0 : 100);
+  const readinessPercent = readiness.readinessPercent;
 
   const nextEvent = React.useMemo(() => {
     if (state.events.length === 0) return undefined;
@@ -74,7 +72,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
               <div className="meta-item">
                 <CheckSquare size={15} className="text-emerald" />
-                <span>Tasks: <strong>{completedPlanTasks.length} of {planTasks.length} Completed</strong></span>
+                <span>Tasks: <strong>{readiness.completedTasks} of {readiness.totalTasks} Completed</strong></span>
               </div>
             </div>
           </div>
@@ -173,7 +171,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </span>
           </div>
           <div className="metric-footer">
-            <span>{planTasks.filter(t => !t.completed).length} visit prep tasks</span>
+            <span>{readiness.openTasks} visit prep tasks</span>
             <ArrowRight size={13} />
           </div>
         </div>

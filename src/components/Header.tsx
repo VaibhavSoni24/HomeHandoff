@@ -1,6 +1,7 @@
 import React from 'react';
-import { Home, Sparkles, RotateCcw, Volume2, VolumeX, Info, CheckCircle2 } from 'lucide-react';
+import { RotateCcw, Volume2, VolumeX, Info, CheckCircle2 } from 'lucide-react';
 import type { HouseholdState } from '../types/household';
+import { computePlanReadiness } from '../utils/readiness';
 
 interface HeaderProps {
   state: HouseholdState;
@@ -17,10 +18,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenDisclosure,
   isSpeaking
 }) => {
-  const activePlan = state.activePlan;
-  const relevantTasks = state.tasks.filter(t => activePlan && t.planId === activePlan.id);
-  const completedTasks = relevantTasks.filter(t => t.completed);
-  const readiness = relevantTasks.length > 0 ? Math.round((completedTasks.length / relevantTasks.length) * 100) : null;
+  const readiness = computePlanReadiness(state);
 
   return (
     <header className="header-container glass-panel">
@@ -28,8 +26,32 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="brand-logo-wrap">
           <div className="brand-glow-halo"></div>
           <div className="brand-logo-icon">
-            <Home size={22} className="logo-icon-svg" />
-            <Sparkles size={12} className="logo-sparkle" />
+            {/* Matching HomeHandoff house + workflow checkmark brand mark */}
+            <svg width="26" height="26" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path 
+                d="M16 4.5 L4.5 14 L7 14 L7 26.5 C7 27.3 7.7 28 8.5 28 L23.5 28 C24.3 28 25 27.3 25 26.5 L25 14 L27.5 14 Z" 
+                stroke="url(#header-brand-grad)" 
+                strokeWidth="2.2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+              />
+              <path 
+                d="M11 17.5 L14.5 21 L21 14.5" 
+                stroke="#38bdf8" 
+                strokeWidth="2.4" 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+              />
+              <circle cx="11" cy="17.5" r="1.5" fill="#06b6d4" />
+              <circle cx="21" cy="14.5" r="1.5" fill="#a855f7" />
+              <defs>
+                <linearGradient id="header-brand-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#06b6d4" />
+                  <stop offset="50%" stopColor="#3b82f6" />
+                  <stop offset="100%" stopColor="#8b5cf6" />
+                </linearGradient>
+              </defs>
+            </svg>
           </div>
         </div>
 
@@ -46,17 +68,17 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       <div className="header-right">
-        {readiness !== null ? (
+        {readiness.hasActivePlan ? (
           <div className="readiness-chip" title="Current Active Plan Readiness">
             <div className="readiness-meter">
               <div 
                 className="readiness-fill" 
-                style={{ width: `${readiness}%` }}
+                style={{ width: `${readiness.readinessPercent}%` }}
               ></div>
             </div>
             <div className="readiness-label">
               <CheckCircle2 size={14} className="text-emerald" />
-              <span>Prep Readiness: <strong>{readiness}%</strong></span>
+              <span>Prep Readiness: <strong>{readiness.readinessPercent}%</strong></span>
             </div>
           </div>
         ) : (

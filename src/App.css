@@ -575,6 +575,14 @@
   box-shadow: var(--shadow-md);
 }
 
+.system-bubble {
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  color: #fda4af;
+  border-bottom-left-radius: 4px;
+  box-shadow: var(--shadow-md);
+}
+
 .bubble-text-content {
   display: flex;
   flex-direction: column;
@@ -2596,5 +2604,18 @@
 
 .footer-link-btn {
   color: var(--alexa-cyan);
+  font-weight: 500;
+}
+
+.form-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  color: #fda4af;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
   font-weight: 500;
 }

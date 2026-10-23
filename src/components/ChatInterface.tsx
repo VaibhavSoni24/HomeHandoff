@@ -135,20 +135,21 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       <div className="messages-stream">
         {state.chatHistory.map((msg, index) => {
           const isUser = msg.sender === 'user';
+          const isSystem = msg.sender === 'system';
           return (
             <div 
               key={msg.id || index} 
-              className={`message-row ${isUser ? 'user-row' : 'assistant-row'} animate-fade-in`}
+              className={`message-row ${isUser ? 'user-row' : isSystem ? 'system-row' : 'assistant-row'} animate-fade-in`}
             >
               <div className="message-bubble-wrapper">
                 <div className="message-header-meta">
                   <span className="message-sender-name">
-                    {isUser ? 'Vaibhav Soni (User)' : 'HomeHandoff (Alexa+ Agent)'}
+                    {isUser ? 'Vaibhav Soni (User)' : isSystem ? 'System Notice' : 'HomeHandoff (Alexa+ Agent)'}
                   </span>
                   <span className="message-timestamp">
                     {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
-                  {!isUser && onSpeakMessage && (
+                  {!isUser && !isSystem && onSpeakMessage && (
                     <button 
                       className="inline-speak-btn" 
                       onClick={() => onSpeakMessage(msg.text)}
@@ -159,7 +160,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   )}
                 </div>
 
-                <div className={`message-bubble ${isUser ? 'user-bubble' : 'assistant-bubble'}`}>
+                <div className={`message-bubble ${isUser ? 'user-bubble' : isSystem ? 'system-bubble' : 'assistant-bubble'}`}>
                   {/* Formatted Text */}
                   <div className="bubble-text-content">
                     {msg.text.split('\n\n').map((paragraph, pIdx) => (
@@ -218,9 +219,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                                   <span className="tool-desc-text">{tool.description}</span>
                                 </div>
                                 <div className="tool-summary-right">
-                                  <span className="tool-duration">
+                                  <span className="tool-duration" title="Client-side simulated latency">
                                     <Clock size={11} />
-                                    {tool.executionTimeMs}ms
+                                    {tool.executionTimeMs}ms (sim)
                                   </span>
                                   <button className="tool-chevron-btn" aria-label="Toggle details">
                                     {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}

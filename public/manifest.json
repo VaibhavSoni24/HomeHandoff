@@ -1,0 +1,21 @@
+{
+  "name": "HomeHandoff — AI Household Planner",
+  "short_name": "HomeHandoff",
+  "description": "Coordinate household tasks, visits, shopping lists and smart-home routines with HomeHandoff, a context-aware household planning demo.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0e17",
+  "theme_color": "#0a0e17",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/apple-touch-icon.svg",
+      "sizes": "180x180",
+      "type": "image/svg+xml"
+    }
+  ]
+}

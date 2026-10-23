@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar as CalendarIcon, Clock, MapPin, Users, Plus } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, MapPin, Users, Plus, AlertCircle } from 'lucide-react';
 import type { CalendarEvent, EventType } from '../types/household';
 import { formatDateTime, formatTimeOnly } from '../utils/dateUtils';
 
@@ -11,6 +11,8 @@ interface CalendarModuleProps {
 export const CalendarModule: React.FC<CalendarModuleProps> = ({ events, onAddEvent }) => {
   const [filterType, setFilterType] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
   const [newEventTitle, setNewEventTitle] = useState('');
   const [newEventType, setNewEventType] = useState<EventType>('family');
   const [newEventStart, setNewEventStart] = useState('');
@@ -20,18 +22,55 @@ export const CalendarModule: React.FC<CalendarModuleProps> = ({ events, onAddEve
   const filteredEvents = events.filter(e => {
     if (filterType === 'all') return true;
     return e.type === filterType;
-  }).sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+  }).sort((a, b) => {
+    const timeA = new Date(a.start).getTime();
+    const timeB = new Date(b.start).getTime();
+    if (isNaN(timeA)) return 1;
+    if (isNaN(timeB)) return -1;
+    return timeA - timeB;
+  });
 
   const handleCreateEvent = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEventTitle.trim() || !newEventStart) return;
+    setFormError(null);
+
+    const title = newEventTitle.trim();
+    if (!title) {
+      setFormError('Please enter an event title.');
+      return;
+    }
+
+    if (!newEventStart) {
+      setFormError('Start date & time is required.');
+      return;
+    }
+
+    const startDate = new Date(newEventStart);
+    if (isNaN(startDate.getTime())) {
+      setFormError('Please select a valid start date and time.');
+      return;
+    }
+
+    let endDate = startDate;
+    if (newEventEnd) {
+      const parsedEnd = new Date(newEventEnd);
+      if (isNaN(parsedEnd.getTime())) {
+        setFormError('Please select a valid end date and time.');
+        return;
+      }
+      if (parsedEnd.getTime() < startDate.getTime()) {
+        setFormError('End date/time must be at or after the start date/time.');
+        return;
+      }
+      endDate = parsedEnd;
+    }
 
     onAddEvent({
-      title: newEventTitle,
+      title,
       type: newEventType,
-      start: new Date(newEventStart).toISOString(),
-      end: newEventEnd ? new Date(newEventEnd).toISOString() : new Date(newEventStart).toISOString(),
-      location: newEventLocation || 'Home',
+      start: startDate.toISOString(),
+      end: endDate.toISOString(),
+      location: newEventLocation.trim() || 'Home',
       attendees: ['Vaibhav', 'Sarah']
     });
 
@@ -40,6 +79,7 @@ export const CalendarModule: React.FC<CalendarModuleProps> = ({ events, onAddEve
     setNewEventStart('');
     setNewEventEnd('');
     setNewEventLocation('');
+    setFormError(null);
   };
 
   return (
@@ -69,7 +109,7 @@ export const CalendarModule: React.FC<CalendarModuleProps> = ({ events, onAddEve
             ))}
           </div>
 
-          <button className="primary-add-btn" onClick={() => setShowAddModal(true)}>
+          <button className="primary-add-btn" onClick={() => { setFormError(null); setShowAddModal(true); }}>
             <Plus size={16} />
             <span>Add Event</span>
           </button>
@@ -81,6 +121,9 @@ export const CalendarModule: React.FC<CalendarModuleProps> = ({ events, onAddEve
         {filteredEvents.length > 0 ? (
           filteredEvents.map(event => {
             const isVisitor = event.type === 'visitor';
+            const startDate = new Date(event.start);
+            const validDate = !isNaN(startDate.getTime());
+
             return (
               <div 
                 key={event.id} 
@@ -94,8 +137,12 @@ export const CalendarModule: React.FC<CalendarModuleProps> = ({ events, onAddEve
 
                 <div className="event-card-top">
                   <div className="event-date-badge">
-                    <span className="badge-month">{new Date(event.start).toLocaleString('en-US', { month: 'short' })}</span>
-                    <span className="badge-day">{new Date(event.start).getDate()}</span>
+                    <span className="badge-month">
+                      {validDate ? startDate.toLocaleString('en-US', { month: 'short' }) : 'Date'}
+                    </span>
+                    <span className="badge-day">
+                      {validDate ? startDate.getDate() : '--'}
+                    </span>
                   </div>
 
                   <div className="event-main-meta">
@@ -147,8 +194,15 @@ export const CalendarModule: React.FC<CalendarModuleProps> = ({ events, onAddEve
           <div className="modal-card glass-panel-elevated" onClick={e => e.stopPropagation()}>
             <h3 className="modal-title">Add Household Calendar Event</h3>
             <form onSubmit={handleCreateEvent} className="modal-form">
+              {formError && (
+                <div className="form-error-banner" role="alert">
+                  <AlertCircle size={15} />
+                  <span>{formError}</span>
+                </div>
+              )}
+
               <div className="form-group">
-                <label>Event Title</label>
+                <label>Event Title *</label>
                 <input 
                   type="text" 
                   required 
@@ -184,7 +238,7 @@ export const CalendarModule: React.FC<CalendarModuleProps> = ({ events, onAddEve
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>Start Date & Time</label>
+                  <label>Start Date & Time *</label>
                   <input 
                     type="datetime-local" 
                     required 

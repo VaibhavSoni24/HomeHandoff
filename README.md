@@ -1,7 +1,6 @@
-# HomeHandoff 🏡✨
+# HomeHandoff — AI Household Planner 🏡✨
 
-> **Amazon Developer Hackathon — Alexa+ Track Submission**  
-> *Context-Aware Autonomous Household Coordination Agent*
+> Coordinate household tasks, visits, shopping lists, and smart-home routines with HomeHandoff, a context-aware household planning demo built for the **Amazon Developer Hackathon (Alexa+ Track)**.
 
 [![Vite](https://img.shields.io/badge/Vite-8.3-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![React](https://img.shields.io/badge/React-19.3-61DAFB?logo=react&logoColor=black)](https://react.dev/)
@@ -11,13 +10,17 @@
 
 ---
 
-## 🌟 Overview
+## 🌟 Product Summary
 
 When family visits or major household events occur, preparing a home requires juggling multiple fragmented surfaces: calendars, family text threads, chore assignments, grocery lists, and smart home appliances. 
 
 **HomeHandoff** is an intelligent, context-aware household coordination agent built for the **Alexa+ web-experience route**. It transforms natural language instructions into coordinated multi-step action plans: blocking calendar arrival windows, delegating categorized tasks to family members with preparation buffers, stocking guest amenities into shopping lists, and automating smart home climate, lighting, and access controls.
 
 Unlike generic conversational chatbots that merely output blocks of decorative text, **HomeHandoff's tool calls actually mutate application state** across all modules with real-time execution traces and persistent browser state.
+
+<!-- Live Demo: When deployed to Vercel, Netlify, or AWS Amplify, insert your production URL here:
+Live Demo: [https://your-domain.vercel.app](https://your-domain.vercel.app)
+-->
 
 ---
 
@@ -164,10 +167,21 @@ npm run lint
 
 ## 🧪 Automated Test Suite
 
-HomeHandoff includes comprehensive automated tests in [`src/test/agentEngine.test.ts`](./src/test/agentEngine.test.ts):
-- **Scenario 1:** Verifies autonomous execution of 4 concurrent tools (`calendar.createEvent`, `tasks.batchCreate`, `shopping.addItems`, `routines.scheduleSmartHomeRoutine`), ensuring all created entities are committed to the state store.
-- **Scenario 2:** Verifies context retention, event shifting to Saturday 5:00 PM, task deadline recalibration, and routine trigger updating to Saturday 3:30 PM.
-- **Scenario 3:** Verifies dynamic readiness calculation (0% initial, 40% after marking tasks completed, accurate incomplete task enumeration).
+HomeHandoff includes 22 automated unit and regression tests across 4 test suites:
+- **`src/test/agentEngine.test.ts`**:
+  - **Scenario 1:** Verifies autonomous execution of 4 tools (`calendar.createEvent`, `tasks.batchCreate`, `shopping.addItems`, `routines.scheduleSmartHomeRoutine`), ensuring created entities are committed to the state store.
+  - **Scenario 2:** Verifies context retention, event shifting to Saturday 5:00 PM, task deadline recalibration, and routine trigger updating to Saturday 3:30 PM.
+  - **Scenario 3:** Verifies dynamic readiness calculation (0% initial, 40% after marking tasks completed, accurate incomplete task enumeration).
+  - **Phrasing Variations:** Tests alternate natural language expressions across all 3 scenarios.
+  - **Rescheduling Isolation:** Ensures rescheduling only touches the active plan while preserving completed task states, unrelated chores, calendar events, and smart routines.
+  - **Missing Plan & Fallbacks:** Graceful responses without crashing when no plan is active or for unrelated queries.
+  - **Rapid State Updates:** Validates state consistency during sequential operations and tool tracking.
+- **`src/test/dateUtils.test.ts`**:
+  - Tests `getUpcomingDayOfWeek` for same-day future vs. past hour/minute boundaries, tomorrow vs. next week, and date formatting.
+- **`src/test/readiness.test.ts`**:
+  - Tests single-source-of-truth `computePlanReadiness` metrics across active plan and global state.
+- **`src/test/storage.test.ts`**:
+  - Tests `validateAndSanitizeState` backward compatibility, corruption resilience, localStorage save/load, and demo reset.
 
 ---
 

@@ -54,6 +54,8 @@ export const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ toolHistory }) =
   const avgDuration = totalCalls > 0 
     ? Math.round(toolHistory.reduce((acc, t) => acc + t.executionTimeMs, 0) / totalCalls) 
     : 0;
+  const successCount = toolHistory.filter(t => t.status === 'success').length;
+  const successRate = totalCalls > 0 ? Math.round((successCount / totalCalls) * 100) : 100;
 
   return (
     <div className="module-container glass-panel">
@@ -76,13 +78,13 @@ export const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ toolHistory }) =
             <span className="stat-num">{totalCalls}</span>
             <span className="stat-label">Calls Executed</span>
           </div>
-          <div className="stat-pill">
+          <div className="stat-pill" title="Simulated client execution latency">
             <span className="stat-num">{avgDuration}ms</span>
-            <span className="stat-label">Avg. Latency</span>
+            <span className="stat-label">Avg. Sim. Latency</span>
           </div>
-          <div className="stat-pill emerald">
-            <span className="stat-num">100%</span>
-            <span className="stat-label">State Success</span>
+          <div className={`stat-pill ${successRate === 100 ? 'emerald' : 'amber'}`}>
+            <span className="stat-num">{successRate}%</span>
+            <span className="stat-label">State Success ({successCount}/{totalCalls})</span>
           </div>
         </div>
       </div>
@@ -132,8 +134,8 @@ export const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ toolHistory }) =
                   </div>
 
                   <div className="trace-header-right">
-                    <span className="trace-time-badge">
-                      <Clock size={12} /> {tool.executionTimeMs}ms
+                    <span className="trace-time-badge" title="Simulated execution latency">
+                      <Clock size={12} /> {tool.executionTimeMs}ms (simulated)
                     </span>
                     <span className="trace-timestamp-text">
                       {new Date(tool.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}

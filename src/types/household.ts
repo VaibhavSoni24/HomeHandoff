@@ -85,8 +85,10 @@ export type ToolName =
   | 'tasks.rescheduleAssociated'
   | 'tasks.toggleComplete'
   | 'shopping.addItems'
+  | 'shopping.toggleComplete'
   | 'routines.scheduleSmartHomeRoutine'
   | 'routines.updateRoutineTrigger'
+  | 'routines.toggleRoutine'
   | 'agent.inspectState';
 
 export interface ToolCall {
