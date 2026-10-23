@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import { 
   MessageSquare, 
@@ -10,7 +10,7 @@ import {
   Sparkles
 } from 'lucide-react';
 
-import type { HouseholdState, CalendarEvent, Task, ShoppingItem } from './types/household';
+import type { HouseholdState, CalendarEvent, Task, ShoppingItem, ToolCall } from './types/household';
 import { loadStateFromStorage, saveStateToStorage, resetDemoState } from './services/storage';
 import { 
   processUserMessage, 
@@ -49,7 +49,7 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  const stateRef = React.useRef(state);
+  const stateRef = useRef(state);
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
@@ -60,7 +60,7 @@ export const App: React.FC = () => {
 
     setIsProcessing(true);
 
-    // Simulate subtle realistic processing latency for asynchronous tool orchestration
+    // Simulate realistic processing latency for asynchronous tool orchestration
     setTimeout(() => {
       try {
         const currentState = stateRef.current;
@@ -77,10 +77,10 @@ export const App: React.FC = () => {
       } catch (err: unknown) {
         console.error('Agent execution error:', err);
         const errorMessageText = err instanceof Error ? err.message : 'Unexpected processing error';
-        const errorMsg: { id: string; sender: 'system'; text: string; timestamp: string } = {
+        const errorMsg = {
           id: `msg-err-${Date.now()}`,
-          sender: 'system',
-          text: `⚠️ **Action Failed:** Could not process household coordination request (${errorMessageText}). Please try again or tap "Reset Demo".`,
+          sender: 'system' as const,
+          text: `Action Failed: Could not process household coordination request (${errorMessageText}). Please try again or tap "Reset Demo".`,
           timestamp: new Date().toISOString()
         };
         setState(prev => ({
@@ -90,7 +90,7 @@ export const App: React.FC = () => {
       } finally {
         setIsProcessing(false);
       }
-    }, 350);
+    }, 280);
   };
 
   // Toggle voice output setting
@@ -126,7 +126,7 @@ export const App: React.FC = () => {
     setActiveTab('chat');
   };
 
-  // Direct state mutations
+  // Direct state mutations with consistent tool tracking
   const handleToggleTask = (taskId: string) => {
     setState(prev => toggleTaskInState(prev, taskId));
   };
@@ -139,37 +139,75 @@ export const App: React.FC = () => {
     setState(prev => toggleRoutineInState(prev, routineId));
   };
 
-  // Direct manual additions
+  // Manual event addition with consistent tool call logging
   const handleAddCalendarEvent = (eventData: Omit<CalendarEvent, 'id'>) => {
     const newEvent: CalendarEvent = {
       ...eventData,
       id: `evt-custom-${Date.now()}`
     };
+    const manualToolCall: ToolCall = {
+      id: `tool-${Date.now()}-cal`,
+      timestamp: new Date().toISOString(),
+      toolName: 'calendar.createEvent',
+      description: `Manually scheduled calendar event: "${newEvent.title}"`,
+      input: { title: newEvent.title, start: newEvent.start, end: newEvent.end, location: newEvent.location },
+      output: { eventId: newEvent.id, status: 'created', source: 'manual_ui' },
+      status: 'success',
+      executionTimeMs: 18
+    };
+
     setState(prev => ({
       ...prev,
-      events: [newEvent, ...prev.events]
+      events: [newEvent, ...prev.events],
+      toolHistory: [manualToolCall, ...prev.toolHistory]
     }));
   };
 
+  // Manual chore addition with consistent tool call logging
   const handleAddTask = (taskData: Omit<Task, 'id'>) => {
     const newTask: Task = {
       ...taskData,
       id: `task-custom-${Date.now()}`
     };
+    const manualToolCall: ToolCall = {
+      id: `tool-${Date.now()}-task`,
+      timestamp: new Date().toISOString(),
+      toolName: 'tasks.batchCreate',
+      description: `Manually added task: "${newTask.title}" (assigned to ${newTask.assignee})`,
+      input: { title: newTask.title, assignee: newTask.assignee, priority: newTask.priority },
+      output: { taskId: newTask.id, status: 'created', source: 'manual_ui' },
+      status: 'success',
+      executionTimeMs: 14
+    };
+
     setState(prev => ({
       ...prev,
-      tasks: [newTask, ...prev.tasks]
+      tasks: [newTask, ...prev.tasks],
+      toolHistory: [manualToolCall, ...prev.toolHistory]
     }));
   };
 
+  // Manual shopping item addition with consistent tool call logging
   const handleAddShoppingItem = (itemData: Omit<ShoppingItem, 'id'>) => {
     const newItem: ShoppingItem = {
       ...itemData,
       id: `shop-custom-${Date.now()}`
     };
+    const manualToolCall: ToolCall = {
+      id: `tool-${Date.now()}-shop`,
+      timestamp: new Date().toISOString(),
+      toolName: 'shopping.addItems',
+      description: `Manually added shopping item: "${newItem.name}" (${newItem.quantity})`,
+      input: { name: newItem.name, quantity: newItem.quantity, category: newItem.category },
+      output: { itemId: newItem.id, status: 'created', source: 'manual_ui' },
+      status: 'success',
+      executionTimeMs: 12
+    };
+
     setState(prev => ({
       ...prev,
-      shoppingItems: [newItem, ...prev.shoppingItems]
+      shoppingItems: [newItem, ...prev.shoppingItems],
+      toolHistory: [manualToolCall, ...prev.toolHistory]
     }));
   };
 
@@ -178,8 +216,18 @@ export const App: React.FC = () => {
   const pendingShoppingCount = state.shoppingItems.filter(s => !s.completed).length;
   const activePlanTitle = state.activePlan?.title;
 
+  const tabsConfig = [
+    { id: 'chat', label: 'Assistant', icon: MessageSquare, badge: null },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null },
+    { id: 'calendar', label: 'Calendar', icon: CalendarIcon, badge: state.events.length },
+    { id: 'tasks', label: 'Chores & Tasks', icon: CheckSquare, badge: pendingTasksCount > 0 ? pendingTasksCount : null },
+    { id: 'shopping', label: 'Shopping List', icon: ShoppingCart, badge: pendingShoppingCount > 0 ? pendingShoppingCount : null },
+    { id: 'routines', label: 'Smart Routines', icon: Cpu, badge: state.routines.filter(r => r.enabled).length },
+    { id: 'trace', label: 'Audit Trail', icon: Sparkles, badge: state.toolHistory.length }
+  ];
+
   return (
-    <div className="app-wrapper">
+    <div className="app-shell">
       {/* Top Header */}
       <Header
         state={state}
@@ -189,73 +237,54 @@ export const App: React.FC = () => {
         isSpeaking={isSpeaking}
       />
 
-      {/* Main Tab Navigation */}
-      <nav className="nav-tabs-bar">
-        <button
-          className={`nav-tab-item ${activeTab === 'chat' ? 'active' : ''}`}
-          onClick={() => setActiveTab('chat')}
-        >
-          <MessageSquare size={16} />
-          <span>Alexa+ Agent</span>
-          <span className="tab-badge">Live</span>
-        </button>
+      {/* Main Navigation Tabs */}
+      <div className="nav-container">
+        {/* Mobile Dropdown Selector for small viewports */}
+        <div className="mobile-nav-selector">
+          <label htmlFor="mobile-tab-select" className="mobile-nav-label">Navigate to:</label>
+          <select 
+            id="mobile-tab-select"
+            className="mobile-select-dropdown"
+            value={activeTab}
+            onChange={e => setActiveTab(e.target.value)}
+          >
+            {tabsConfig.map(tab => (
+              <option key={tab.id} value={tab.id}>
+                {tab.label} {tab.badge ? `(${tab.badge})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        <button
-          className={`nav-tab-item ${activeTab === 'dashboard' ? 'active' : ''}`}
-          onClick={() => setActiveTab('dashboard')}
-        >
-          <LayoutDashboard size={16} />
-          <span>Dashboard</span>
-        </button>
-
-        <button
-          className={`nav-tab-item ${activeTab === 'calendar' ? 'active' : ''}`}
-          onClick={() => setActiveTab('calendar')}
-        >
-          <CalendarIcon size={16} />
-          <span>Calendar</span>
-          <span className="tab-badge">{state.events.length}</span>
-        </button>
-
-        <button
-          className={`nav-tab-item ${activeTab === 'tasks' ? 'active' : ''}`}
-          onClick={() => setActiveTab('tasks')}
-        >
-          <CheckSquare size={16} />
-          <span>Chores & Tasks</span>
-          {pendingTasksCount > 0 && <span className="tab-badge">{pendingTasksCount}</span>}
-        </button>
-
-        <button
-          className={`nav-tab-item ${activeTab === 'shopping' ? 'active' : ''}`}
-          onClick={() => setActiveTab('shopping')}
-        >
-          <ShoppingCart size={16} />
-          <span>Shopping List</span>
-          {pendingShoppingCount > 0 && <span className="tab-badge">{pendingShoppingCount}</span>}
-        </button>
-
-        <button
-          className={`nav-tab-item ${activeTab === 'routines' ? 'active' : ''}`}
-          onClick={() => setActiveTab('routines')}
-        >
-          <Cpu size={16} />
-          <span>Smart Routines</span>
-          <span className="tab-badge">{state.routines.filter(r => r.enabled).length}</span>
-        </button>
-
-        <button
-          className={`nav-tab-item ${activeTab === 'trace' ? 'active' : ''}`}
-          onClick={() => setActiveTab('trace')}
-        >
-          <Sparkles size={16} />
-          <span>Execution Trace</span>
-          <span className="tab-badge">{state.toolHistory.length}</span>
-        </button>
-      </nav>
+        {/* Desktop / Tablet Segmented Tab Bar */}
+        <nav className="primary-tabs-nav" aria-label="Main Navigation">
+          {tabsConfig.map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={`tab-nav-btn ${isActive ? 'tab-nav-active' : ''}`}
+                onClick={() => setActiveTab(tab.id)}
+                aria-selected={isActive}
+                role="tab"
+              >
+                <Icon size={15} />
+                <span>{tab.label}</span>
+                {tab.badge !== null && (
+                  <span className={`tab-count-badge ${isActive ? 'badge-active' : ''}`}>
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
 
       {/* Main Content Area */}
-      <main className="main-content-panel">
+      <main className="main-viewport" role="tabpanel">
         {activeTab === 'chat' && (
           <ChatInterface
             state={state}
@@ -318,20 +347,28 @@ export const App: React.FC = () => {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="app-footer glass-panel">
-        <div className="footer-left">
-          <span>HomeHandoff · Context-Aware Household Coordination</span>
-          <span>•</span>
-          <span>Amazon Developer Hackathon — Alexa+ Track</span>
+      {/* Clean Restrained Footer */}
+      <footer className="app-footer-bar">
+        <div className="footer-meta-left">
+          <span>HomeHandoff · Autonomous Household Coordination</span>
+          <span className="footer-dot">•</span>
+          <span>Amazon Developer Hackathon (Alexa+ Track)</span>
         </div>
-        <div className="footer-right">
-          <button className="footer-link-btn" onClick={() => setShowDisclosure(true)}>
+        <div className="footer-links-right">
+          <button 
+            type="button" 
+            className="footer-btn-link" 
+            onClick={() => setShowDisclosure(true)}
+          >
             Simulated Integrations Disclosure
           </button>
-          <span>•</span>
-          <button className="footer-link-btn" onClick={handleResetDemo}>
-            Reset Demo Data
+          <span className="footer-dot">•</span>
+          <button 
+            type="button" 
+            className="footer-btn-link" 
+            onClick={handleResetDemo}
+          >
+            Reset Demo
           </button>
         </div>
       </footer>

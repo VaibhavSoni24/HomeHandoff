@@ -9,7 +9,7 @@ import type {
   ChatMessage,
   PlanSummary
 } from '../types/household';
-import { getUpcomingDayOfWeek, formatDateTime, formatDateShort } from '../utils/dateUtils';
+import { getUpcomingDayOfWeek, getRescheduledDateForPlan, formatDateTime, formatDateShort } from '../utils/dateUtils';
 import { computePlanReadiness } from '../utils/readiness';
 
 export interface AgentExecutionResult {
@@ -567,7 +567,8 @@ function handleScenario2RescheduleSaturday(state: HouseholdState, _params: Recor
   }
 
   const planId = activePlan.id;
-  const newSaturdayDate = getUpcomingDayOfWeek(6, 17, 0); // Saturday 5:00 PM
+  // Compute Saturday relative to the active visit plan, preventing unintended week skips
+  const newSaturdayDate = getRescheduledDateForPlan(activePlan.targetDate, 6, 17, 0); // Saturday 5:00 PM
   const newSundayDate = new Date(newSaturdayDate);
   newSundayDate.setDate(newSaturdayDate.getDate() + 1);
   newSundayDate.setHours(18, 0, 0, 0);

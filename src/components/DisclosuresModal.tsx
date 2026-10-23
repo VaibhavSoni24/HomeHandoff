@@ -1,5 +1,5 @@
-import React from 'react';
-import { ShieldCheck, X, CheckCircle, ExternalLink, Cpu, Sparkles } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Shield, X, Cpu, Calendar, ShoppingCart, MessageSquare } from 'lucide-react';
 
 interface DisclosuresModalProps {
   isOpen: boolean;
@@ -7,94 +7,98 @@ interface DisclosuresModalProps {
 }
 
 export const DisclosuresModal: React.FC<DisclosuresModalProps> = ({ isOpen, onClose }) => {
+  // Close on Escape key press
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card modal-large glass-panel-elevated" onClick={e => e.stopPropagation()}>
-        <div className="disclosure-modal-header">
-          <div className="disclosure-title-wrap">
-            <div className="disclosure-badge">
-              <ShieldCheck size={18} className="text-cyan" />
-              <span>Amazon Developer Hackathon — Alexa+ Track</span>
-            </div>
-            <h2 className="modal-title">Honest Disclosure & Simulated Architecture</h2>
+    <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="modal-disc-title">
+      <div className="modal-dialog modal-large surface-card" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="disclosure-title-group">
+            <span className="badge badge-neutral">
+              <Shield size={13} />
+              <span>Hackathon Architecture Notice</span>
+            </span>
+            <h2 id="modal-disc-title" className="modal-title">Simulated Alexa+ Integrations Disclosure</h2>
           </div>
-          <button className="modal-close-btn" onClick={onClose}>
-            <X size={18} />
+          <button 
+            type="button" 
+            className="btn-close" 
+            onClick={onClose}
+            aria-label="Close disclosures dialog"
+          >
+            <X size={16} />
           </button>
         </div>
 
-        <div className="disclosure-content-body">
-          <div className="disclosure-notice-box">
-            <strong>Judging Note:</strong> HomeHandoff uses the officially permitted <em>simulated Alexa+ web-experience route</em>. 
-            All simulated integrations operate within this high-fidelity client sandbox and do <strong>not</strong> require or pretend to be 
-            connected to paid production Amazon cloud services.
+        <div className="modal-content-body">
+          <div className="disclosure-callout-box">
+            <strong>Judging Transparency Note:</strong> HomeHandoff implements the officially permitted <em>simulated Alexa+ web-experience track</em> for the Amazon Developer Hackathon. All four simulated touchpoints execute deterministically within this client-side state engine. The application does <strong>not</strong> contact live Amazon cloud services or require paid consumer credentials.
           </div>
 
-          <h3 className="disclosure-subheading">Simulated Integration Touchpoints:</h3>
-          <div className="integrations-list">
-            <div className="integration-item">
-              <div className="integration-icon-wrap cyan">
-                <Sparkles size={16} />
-              </div>
-              <div className="integration-info">
-                <h4>1. Alexa Voice Service (AVS) & Conversational Agent</h4>
+          <h3 className="disclosure-list-heading">Simulated Touchpoint Implementations:</h3>
+          
+          <div className="disclosure-touchpoints-list">
+            <div className="touchpoint-row">
+              <span className="touchpoint-icon"><MessageSquare size={16} /></span>
+              <div className="touchpoint-info">
+                <h4>1. Alexa Voice Service (AVS) & Intent Engine</h4>
                 <p>
-                  Simulates multi-turn Alexa+ conversational intent classification and multi-step decomposition. 
-                  Includes optional voice output via the browser's native Web Speech API and visual soundwave equalizer bars.
+                  Natural language intent classification with multi-turn context memory. 
+                  Includes optional voice output synthesized through the browser's native Web Speech API.
                 </p>
               </div>
             </div>
 
-            <div className="integration-item">
-              <div className="integration-icon-wrap emerald">
-                <Cpu size={16} />
-              </div>
-              <div className="integration-info">
-                <h4>2. Alexa Smart Home Skills API</h4>
+            <div className="touchpoint-row">
+              <span className="touchpoint-icon"><Calendar size={16} /></span>
+              <div className="touchpoint-info">
+                <h4>2. Alexa Household Calendar Integration</h4>
                 <p>
-                  Simulates device state control and scheduled routines for Ecobee Thermostats (pre-conditioning climate), 
-                  Philips Hue lighting scenes (Warm Welcome), Schlage Smart Deadbolts (temporary guest PIN code generation), 
-                  and robot vacuum scheduling.
+                  Blocks visitor arrival and departure windows with pre-arrival buffer calculations. 
+                  Every tool call (e.g. <code>calendar.createEvent</code>, <code>calendar.updateEvent</code>) mutates real application state.
                 </p>
               </div>
             </div>
 
-            <div className="integration-item">
-              <div className="integration-icon-wrap amber">
-                <CheckCircle size={16} />
-              </div>
-              <div className="integration-info">
+            <div className="touchpoint-row">
+              <span className="touchpoint-icon"><ShoppingCart size={16} /></span>
+              <div className="touchpoint-info">
                 <h4>3. Alexa Shopping List API</h4>
                 <p>
-                  Simulates synchronized grocery and guest amenity lists with aisle-by-aisle organization, 
-                  quantity tagging, and checkable purchase status.
+                  Synchronizes guest amenities and grocery preferences organized by grocery aisle. 
+                  Items can be checked off and filtered by department.
                 </p>
               </div>
             </div>
 
-            <div className="integration-item">
-              <div className="integration-icon-wrap purple">
-                <ExternalLink size={16} />
-              </div>
-              <div className="integration-info">
-                <h4>4. Household Calendar & Tool Mutator Engine</h4>
+            <div className="touchpoint-row">
+              <span className="touchpoint-icon"><Cpu size={16} /></span>
+              <div className="touchpoint-info">
+                <h4>4. Alexa Smart Home Skills API</h4>
                 <p>
-                  Unlike decorative chatbot mocks, every tool call executed by the agent (e.g. <code>calendar.createEvent</code>, 
-                  <code>calendar.updateEvent</code>, <code>tasks.rescheduleAssociated</code>) directly mutates 
-                  the actual application state and updates all linked views and readiness metrics in real-time.
+                  Simulates smart device state management for thermostats, lighting scenes, guest access passcodes, and robotic vacuum runs. 
+                  Telemetry is derived directly from state without operating physical IoT hardware.
                 </p>
               </div>
             </div>
           </div>
+        </div>
 
-          <div className="disclosure-footer-meta">
-            <span>Built by Vaibhav Soni for Amazon Developer Hackathon (Alexa+ Track)</span>
-            <button className="primary-confirm-btn" onClick={onClose}>
-              Understood
-            </button>
-          </div>
+        <div className="modal-footer disclosure-footer">
+          <span className="disclosure-credit">Amazon Developer Hackathon — Alexa+ Track Submission</span>
+          <button type="button" className="btn-primary" onClick={onClose}>
+            Close Notice
+          </button>
         </div>
       </div>
     </div>

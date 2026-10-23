@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialSeedState } from '../data/seedData';
-import { processUserMessage, toggleTaskInState, toggleShoppingItemInState } from '../services/agentEngine';
+import { 
+  processUserMessage, 
+  toggleTaskInState, 
+  toggleShoppingItemInState,
+  toggleRoutineInState 
+} from '../services/agentEngine';
+import { computePlanReadiness } from '../utils/readiness';
 
 describe('HomeHandoff Agent Engine & Tool Execution', () => {
   it('Scenario 1: Creates multi-step plan, calendar event, tasks, shopping, and smart routine', () => {
@@ -215,5 +221,42 @@ describe('HomeHandoff Agent Engine & Tool Execution', () => {
     expect(state.toolHistory.length).toBeGreaterThan(5);
     expect(state.tasks.find(t => t.id === taskId)?.completed).toBe(true);
     expect(state.shoppingItems.find(s => s.id === shoppingId)?.completed).toBe(true);
+  });
+
+  it('verifies complete parents-visit -> reschedule -> readiness-inspection workflow with unified readiness', () => {
+    const state = createInitialSeedState();
+
+    // 1. Initial Plan Creation (Scenario 1)
+    const step1 = processUserMessage('My parents are visiting Friday. Prepare the house.', state);
+    expect(step1.nextState.activePlan).not.toBeNull();
+    const readinessAfterStep1 = computePlanReadiness(step1.nextState);
+    expect(readinessAfterStep1.readinessPercent).toBe(0);
+    expect(readinessAfterStep1.completedTasks).toBe(0);
+    expect(readinessAfterStep1.totalTasks).toBe(5);
+
+    // 2. Complete 1 Task
+    const planTasks = step1.nextState.tasks.filter(t => t.planId === step1.nextState.activePlan?.id);
+    const stateWith1TaskDone = toggleTaskInState(step1.nextState, planTasks[0].id);
+    const readinessWith1Done = computePlanReadiness(stateWith1TaskDone);
+    expect(readinessWith1Done.readinessPercent).toBe(20); // 1/5 = 20%
+    expect(readinessWith1Done.completedTasks).toBe(1);
+
+    // 3. Reschedule to Saturday (Scenario 2)
+    const step2 = processUserMessage("Actually, they're arriving Saturday at 5 PM.", stateWith1TaskDone);
+    // Completion state survives reschedule
+    const readinessAfterReschedule = computePlanReadiness(step2.nextState);
+    expect(readinessAfterReschedule.readinessPercent).toBe(20);
+    expect(readinessAfterReschedule.completedTasks).toBe(1);
+
+    // 4. Query Readiness (Scenario 3)
+    const step3 = processUserMessage('What still needs doing before they arrive?', step2.nextState);
+    expect(step3.responseMessage.planSummary?.readinessScore).toBe(20);
+    expect(step3.responseMessage.planSummary?.completedTasks).toBe(1);
+    expect(step3.responseMessage.planSummary?.totalTasks).toBe(5);
+
+    // 5. Toggle routine
+    const routineId = step3.nextState.routines[0].id;
+    const stateWithRoutineToggled = toggleRoutineInState(step3.nextState, routineId);
+    expect(stateWithRoutineToggled.toolHistory.some(t => t.toolName === 'routines.toggleRoutine')).toBe(true);
   });
 });

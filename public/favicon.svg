@@ -1,39 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
-  <defs>
-    <linearGradient id="hh-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#06b6d4" />
-      <stop offset="50%" stop-color="#3b82f6" />
-      <stop offset="100%" stop-color="#8b5cf6" />
-    </linearGradient>
-    <linearGradient id="hh-glow" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.2" />
-      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.05" />
-    </linearGradient>
-  </defs>
-
-  <!-- Dark container background for maximum contrast across browser tabs -->
-  <rect width="32" height="32" rx="8" fill="#0b1120" />
-  <rect width="32" height="32" rx="8" fill="url(#hh-glow)" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
-
-  <!-- House Roof & Walls Contour -->
-  <path 
-    d="M16 4.5 L4.5 14 L7 14 L7 26.5 C7 27.3 7.7 28 8.5 28 L23.5 28 C24.3 28 25 27.3 25 26.5 L25 14 L27.5 14 Z" 
-    fill="none" 
-    stroke="url(#hh-grad)" 
-    stroke-width="2" 
-    stroke-linecap="round" 
-    stroke-linejoin="round" 
-  />
-
-  <!-- Connected Coordination Node / Arrow Handoff Motif -->
-  <path 
-    d="M11 17.5 L14.5 21 L21 14.5" 
-    fill="none" 
-    stroke="#38bdf8" 
-    stroke-width="2.2" 
-    stroke-linecap="round" 
-    stroke-linejoin="round" 
-  />
-  <circle cx="11" cy="17.5" r="1.5" fill="#06b6d4" />
-  <circle cx="21" cy="14.5" r="1.5" fill="#a855f7" />
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="32" height="32" rx="8" fill="#0284c7"/>
+  <!-- Simplified HomeHandoff House + Checkmark Workflow Motif -->
+  <path d="M16 6L6 14.5V25C6 25.55 6.45 26 7 26H25C25.55 26 26 25.55 26 25V14.5L16 6Z" fill="#0369a1" stroke="#ffffff" stroke-width="1.75" stroke-linejoin="round"/>
+  <!-- Connected Workflow Checkmark -->
+  <path d="M11 17.5L14.5 21L21 14.5" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

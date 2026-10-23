@@ -1,4 +1,12 @@
-import type { HouseholdState } from '../types/household';
+import type { 
+  HouseholdState, 
+  CalendarEvent, 
+  Task, 
+  ShoppingItem, 
+  SmartRoutine,
+  ToolCall,
+  ChatMessage
+} from '../types/household';
 import { createInitialSeedState } from '../data/seedData';
 
 const STORAGE_KEY = 'homehandoff_state_v1';
@@ -15,15 +23,39 @@ export function validateAndSanitizeState(raw: unknown): HouseholdState {
 
   const obj = raw as Record<string, unknown>;
 
-  // Safely check array fields with fallback to seed
-  const events = Array.isArray(obj.events) ? obj.events : seed.events;
-  const tasks = Array.isArray(obj.tasks) ? obj.tasks : seed.tasks;
-  const shoppingItems = Array.isArray(obj.shoppingItems) ? obj.shoppingItems : seed.shoppingItems;
-  const routines = Array.isArray(obj.routines) ? obj.routines : seed.routines;
-  const toolHistory = Array.isArray(obj.toolHistory) ? obj.toolHistory : [];
-  const chatHistory = Array.isArray(obj.chatHistory) && obj.chatHistory.length > 0 
+  // Safely check array fields with filter for valid items and fallback to seed
+  const rawEvents = Array.isArray(obj.events) ? obj.events : seed.events;
+  const events: CalendarEvent[] = rawEvents.filter(
+    (e): e is CalendarEvent => !!e && typeof e === 'object' && typeof (e as any).id === 'string' && typeof (e as any).title === 'string'
+  );
+
+  const rawTasks = Array.isArray(obj.tasks) ? obj.tasks : seed.tasks;
+  const tasks: Task[] = rawTasks.filter(
+    (t): t is Task => !!t && typeof t === 'object' && typeof (t as any).id === 'string' && typeof (t as any).title === 'string'
+  );
+
+  const rawShopping = Array.isArray(obj.shoppingItems) ? obj.shoppingItems : seed.shoppingItems;
+  const shoppingItems: ShoppingItem[] = rawShopping.filter(
+    (s): s is ShoppingItem => !!s && typeof s === 'object' && typeof (s as any).id === 'string' && typeof (s as any).name === 'string'
+  );
+
+  const rawRoutines = Array.isArray(obj.routines) ? obj.routines : seed.routines;
+  const routines: SmartRoutine[] = rawRoutines.filter(
+    (r): r is SmartRoutine => !!r && typeof r === 'object' && typeof (r as any).id === 'string' && typeof (r as any).name === 'string' && Array.isArray((r as any).actions)
+  );
+
+  const rawTools = Array.isArray(obj.toolHistory) ? obj.toolHistory : [];
+  const toolHistory: ToolCall[] = rawTools.filter(
+    (t): t is ToolCall => !!t && typeof t === 'object' && typeof (t as any).id === 'string' && typeof (t as any).toolName === 'string'
+  );
+
+  const rawChat = Array.isArray(obj.chatHistory) && obj.chatHistory.length > 0 
     ? obj.chatHistory 
     : seed.chatHistory;
+  const chatHistory: ChatMessage[] = rawChat.filter(
+    (m): m is ChatMessage => !!m && typeof m === 'object' && typeof (m as any).id === 'string' && typeof (m as any).text === 'string'
+  );
+
   const householdMembers = Array.isArray(obj.householdMembers) && obj.householdMembers.length > 0
     ? obj.householdMembers
     : seed.householdMembers;
@@ -48,12 +80,12 @@ export function validateAndSanitizeState(raw: unknown): HouseholdState {
   return {
     activePlan,
     archivedPlans,
-    events,
-    tasks,
-    shoppingItems,
-    routines,
+    events: events.length > 0 ? events : seed.events,
+    tasks: tasks.length > 0 ? tasks : seed.tasks,
+    shoppingItems: shoppingItems.length > 0 ? shoppingItems : seed.shoppingItems,
+    routines: routines.length > 0 ? routines : seed.routines,
     toolHistory,
-    chatHistory,
+    chatHistory: chatHistory.length > 0 ? chatHistory : seed.chatHistory,
     householdMembers,
     settings
   };

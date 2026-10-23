@@ -83,25 +83,21 @@ export const CalendarModule: React.FC<CalendarModuleProps> = ({ events, onAddEve
   };
 
   return (
-    <div className="module-container glass-panel">
+    <div className="module-panel surface-card">
       {/* Header bar */}
-      <div className="module-header">
-        <div className="module-title-group">
-          <div className="module-icon-wrap cyan">
-            <CalendarIcon size={20} />
-          </div>
-          <div>
-            <h2 className="module-title">Household Calendar & Visit Blocks</h2>
-            <p className="module-subtitle">Synchronized family schedule, visitor blocks, and automated prep windows</p>
-          </div>
+      <div className="module-header-row">
+        <div>
+          <h2 className="module-heading">Household Calendar</h2>
+          <p className="module-subheading">Family schedules, visitor arrival blocks, and preparation windows</p>
         </div>
 
-        <div className="module-actions">
-          <div className="filter-pill-group">
+        <div className="module-header-actions">
+          <div className="filter-button-group">
             {['all', 'visitor', 'family', 'routine', 'errand'].map(type => (
               <button
                 key={type}
-                className={`filter-btn ${filterType === type ? 'active' : ''}`}
+                type="button"
+                className={`btn-filter ${filterType === type ? 'active' : ''}`}
                 onClick={() => setFilterType(type)}
               >
                 {type.charAt(0).toUpperCase() + type.slice(1)}
@@ -109,15 +105,19 @@ export const CalendarModule: React.FC<CalendarModuleProps> = ({ events, onAddEve
             ))}
           </div>
 
-          <button className="primary-add-btn" onClick={() => { setFormError(null); setShowAddModal(true); }}>
-            <Plus size={16} />
+          <button 
+            type="button" 
+            className="btn-primary" 
+            onClick={() => { setFormError(null); setShowAddModal(true); }}
+          >
+            <Plus size={15} />
             <span>Add Event</span>
           </button>
         </div>
       </div>
 
-      {/* Events List / Timeline Cards */}
-      <div className="calendar-grid">
+      {/* Events List */}
+      <div className="events-stream-list">
         {filteredEvents.length > 0 ? (
           filteredEvents.map(event => {
             const isVisitor = event.type === 'visitor';
@@ -127,72 +127,86 @@ export const CalendarModule: React.FC<CalendarModuleProps> = ({ events, onAddEve
             return (
               <div 
                 key={event.id} 
-                className={`calendar-event-card ${isVisitor ? 'visitor-event-highlight' : ''}`}
+                className={`event-list-row ${isVisitor ? 'event-row-visitor' : ''}`}
               >
-                {isVisitor && (
-                  <div className="visitor-ribbon">
-                    <span>Alexa+ Coordinated Visit</span>
-                  </div>
-                )}
-
-                <div className="event-card-top">
-                  <div className="event-date-badge">
-                    <span className="badge-month">
-                      {validDate ? startDate.toLocaleString('en-US', { month: 'short' }) : 'Date'}
-                    </span>
-                    <span className="badge-day">
-                      {validDate ? startDate.getDate() : '--'}
-                    </span>
-                  </div>
-
-                  <div className="event-main-meta">
-                    <div className="event-title-row">
-                      <h3 className="event-card-title">{event.title}</h3>
-                      <span className={`event-type-tag ${event.type}`}>{event.type}</span>
+                <div className="event-date-col">
+                  {validDate ? (
+                    <div className="date-tile">
+                      <span className="date-tile-month">
+                        {startDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}
+                      </span>
+                      <span className="date-tile-day">{startDate.getDate()}</span>
                     </div>
-
-                    <div className="event-timing-row">
-                      <Clock size={14} className="text-secondary" />
-                      <span>{formatDateTime(event.start)} — {formatTimeOnly(event.end)}</span>
+                  ) : (
+                    <div className="date-tile">
+                      <span className="date-tile-day">—</span>
                     </div>
-
-                    {event.location && (
-                      <div className="event-location-row">
-                        <MapPin size={14} className="text-secondary" />
-                        <span>{event.location}</span>
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
 
-                {event.notes && (
-                  <div className="event-notes-box">
-                    <p>{event.notes}</p>
+                <div className="event-info-col">
+                  <div className="event-title-line">
+                    <h3 className="event-title">{event.title}</h3>
+                    <span className={`event-type-badge ${event.type}`}>
+                      {event.type.toUpperCase()}
+                    </span>
+                    {isVisitor && (
+                      <span className="badge badge-accent">Coordinated Visit</span>
+                    )}
                   </div>
-                )}
 
-                {event.attendees && event.attendees.length > 0 && (
-                  <div className="event-attendees-bar">
-                    <Users size={13} className="text-secondary" />
-                    <span>Attendees: <strong>{event.attendees.join(', ')}</strong></span>
+                  <div className="event-meta-line">
+                    <span className="event-meta-item">
+                      <Clock size={13} />
+                      <span>{formatDateTime(event.start)} — {formatTimeOnly(event.end)}</span>
+                    </span>
+
+                    {event.location && (
+                      <span className="event-meta-item">
+                        <MapPin size={13} />
+                        <span>{event.location}</span>
+                      </span>
+                    )}
+
+                    {event.attendees && event.attendees.length > 0 && (
+                      <span className="event-meta-item">
+                        <Users size={13} />
+                        <span>{event.attendees.join(', ')}</span>
+                      </span>
+                    )}
                   </div>
-                )}
+
+                  {event.notes && (
+                    <p className="event-notes-text">{event.notes}</p>
+                  )}
+                </div>
               </div>
             );
           })
         ) : (
-          <div className="empty-module-state">
-            <CalendarIcon size={36} className="text-muted" />
-            <p>No calendar events match the current filter.</p>
+          <div className="empty-state-card">
+            <CalendarIcon size={24} className="text-muted" />
+            <p>No calendar events found matching the "{filterType}" filter.</p>
           </div>
         )}
       </div>
 
-      {/* Quick Add Modal */}
+      {/* Add Event Modal */}
       {showAddModal && (
         <div className="modal-backdrop" onClick={() => setShowAddModal(false)}>
-          <div className="modal-card glass-panel-elevated" onClick={e => e.stopPropagation()}>
-            <h3 className="modal-title">Add Household Calendar Event</h3>
+          <div className="modal-dialog surface-card" onClick={e => e.stopPropagation()} role="dialog" aria-labelledby="add-event-title">
+            <div className="modal-header">
+              <h3 id="add-event-title" className="modal-title">Schedule New Event</h3>
+              <button 
+                type="button" 
+                className="btn-close" 
+                onClick={() => setShowAddModal(false)}
+                aria-label="Close dialog"
+              >
+                ✕
+              </button>
+            </div>
+
             <form onSubmit={handleCreateEvent} className="modal-form">
               {formError && (
                 <div className="form-error-banner" role="alert">
@@ -202,63 +216,83 @@ export const CalendarModule: React.FC<CalendarModuleProps> = ({ events, onAddEve
               )}
 
               <div className="form-group">
-                <label>Event Title *</label>
-                <input 
-                  type="text" 
-                  required 
-                  placeholder="e.g. In-laws Visiting, Dentist Appointment"
+                <label htmlFor="evt-title" className="form-label">Event Title *</label>
+                <input
+                  id="evt-title"
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g., Mom & Dad Visit, HVAC Service"
                   value={newEventTitle}
                   onChange={e => setNewEventTitle(e.target.value)}
+                  autoFocus
                 />
               </div>
 
-              <div className="form-row">
+              <div className="form-row-2">
                 <div className="form-group">
-                  <label>Type</label>
-                  <select 
-                    value={newEventType} 
+                  <label htmlFor="evt-type" className="form-label">Event Category</label>
+                  <select
+                    id="evt-type"
+                    className="form-select"
+                    value={newEventType}
                     onChange={e => setNewEventType(e.target.value as EventType)}
                   >
-                    <option value="family">Family</option>
-                    <option value="visitor">Visitor</option>
-                    <option value="routine">Routine</option>
+                    <option value="visitor">Visitor Block</option>
+                    <option value="family">Family Gathering</option>
                     <option value="errand">Errand</option>
+                    <option value="routine">Routine</option>
+                    <option value="preparation">Preparation</option>
                   </select>
                 </div>
+
                 <div className="form-group">
-                  <label>Location</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. Home, Airport, Clinic"
+                  <label htmlFor="evt-location" className="form-label">Location</label>
+                  <input
+                    id="evt-location"
+                    type="text"
+                    className="form-input"
+                    placeholder="Home - Guest Suite"
                     value={newEventLocation}
                     onChange={e => setNewEventLocation(e.target.value)}
                   />
                 </div>
               </div>
 
-              <div className="form-row">
+              <div className="form-row-2">
                 <div className="form-group">
-                  <label>Start Date & Time *</label>
-                  <input 
-                    type="datetime-local" 
-                    required 
+                  <label htmlFor="evt-start" className="form-label">Start Date & Time *</label>
+                  <input
+                    id="evt-start"
+                    type="datetime-local"
+                    className="form-input"
                     value={newEventStart}
                     onChange={e => setNewEventStart(e.target.value)}
                   />
                 </div>
+
                 <div className="form-group">
-                  <label>End Date & Time</label>
-                  <input 
-                    type="datetime-local" 
+                  <label htmlFor="evt-end" className="form-label">End Date & Time</label>
+                  <input
+                    id="evt-end"
+                    type="datetime-local"
+                    className="form-input"
                     value={newEventEnd}
                     onChange={e => setNewEventEnd(e.target.value)}
                   />
                 </div>
               </div>
 
-              <div className="modal-buttons">
-                <button type="button" className="btn-cancel" onClick={() => setShowAddModal(false)}>Cancel</button>
-                <button type="submit" className="btn-confirm">Create Event</button>
+              <div className="modal-footer">
+                <button 
+                  type="button" 
+                  className="btn-secondary" 
+                  onClick={() => setShowAddModal(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary">
+                  Schedule Event
+                </button>
               </div>
             </form>
           </div>

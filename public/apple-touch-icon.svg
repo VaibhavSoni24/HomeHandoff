@@ -1,38 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180">
-  <defs>
-    <linearGradient id="apple-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#06b6d4" />
-      <stop offset="50%" stop-color="#3b82f6" />
-      <stop offset="100%" stop-color="#8b5cf6" />
-    </linearGradient>
-    <linearGradient id="apple-glow" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.3" />
-      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.1" />
-    </linearGradient>
-  </defs>
-
-  <rect width="180" height="180" rx="40" fill="#0b1120" />
-  <rect width="180" height="180" rx="40" fill="url(#apple-glow)" stroke="rgba(255,255,255,0.12)" stroke-width="2" />
-
-  <!-- House Structure -->
-  <path 
-    d="M90 26 L26 79 L40 79 L40 148 C40 152.4 43.6 156 48 156 L132 156 C136.4 156 140 152.4 140 148 L140 79 L154 79 Z" 
-    fill="none" 
-    stroke="url(#apple-grad)" 
-    stroke-width="11" 
-    stroke-linecap="round" 
-    stroke-linejoin="round" 
-  />
-
-  <!-- Coordination Nodes & Checkmark Path -->
-  <path 
-    d="M62 98 L82 118 L118 82" 
-    fill="none" 
-    stroke="#38bdf8" 
-    stroke-width="12" 
-    stroke-linecap="round" 
-    stroke-linejoin="round" 
-  />
-  <circle cx="62" cy="98" r="8" fill="#06b6d4" />
-  <circle cx="118" cy="82" r="8" fill="#a855f7" />
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="180" height="180" rx="40" fill="#0284c7"/>
+  <!-- HomeHandoff House + Checkmark Workflow Motif -->
+  <path d="M90 34L34 81.5V140C34 143.3 36.7 146 40 146H140C143.3 146 146 143.3 146 140V81.5L90 34Z" fill="#0369a1" stroke="#ffffff" stroke-width="10" stroke-linejoin="round"/>
+  <!-- Connected Workflow Checkmark -->
+  <path d="M62 98.5L81.5 118L118 81.5" stroke="#ffffff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

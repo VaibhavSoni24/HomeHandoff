@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { getUpcomingDayOfWeek, formatDateTime, formatTimeOnly, formatDateShort } from '../utils/dateUtils';
+import { 
+  getUpcomingDayOfWeek, 
+  getRescheduledDateForPlan, 
+  parseExplicitDate,
+  formatDateTime, 
+  formatTimeOnly, 
+  formatDateShort 
+} from '../utils/dateUtils';
 
 describe('dateUtils: getUpcomingDayOfWeek & formatting', () => {
   it('returns today when target is today and current time is before target time', () => {
@@ -82,5 +89,35 @@ describe('dateUtils: getUpcomingDayOfWeek & formatting', () => {
     expect(typeof formatTimeOnly(iso)).toBe('string');
     expect(typeof formatDateShort(iso)).toBe('string');
     expect(formatDateTime('invalid-date')).toBe('invalid-date');
+  });
+
+  it('getRescheduledDateForPlan: reschedules relative to the existing plan date without skipping a week', () => {
+    // Visit plan currently scheduled for Friday, Oct 23, 2026 at 6:00 PM
+    const planFriday = new Date(2026, 9, 23, 18, 0, 0, 0).toISOString();
+
+    // Reschedule to Saturday (day 6) at 17:00 (5:00 PM)
+    const rescheduled = getRescheduledDateForPlan(planFriday, 6, 17, 0);
+
+    expect(rescheduled.getFullYear()).toBe(2026);
+    expect(rescheduled.getMonth()).toBe(9);
+    expect(rescheduled.getDate()).toBe(24); // Exactly 1 day after Friday of that visit weekend!
+    expect(rescheduled.getDay()).toBe(6); // Saturday
+    expect(rescheduled.getHours()).toBe(17);
+    expect(rescheduled.getMinutes()).toBe(0);
+  });
+
+  it('parseExplicitDate: parses explicit calendar dates and distinguishes from plain text', () => {
+    const parsedIso = parseExplicitDate('Arrival moved to 2026-11-14');
+    expect(parsedIso).not.toBeNull();
+    expect(parsedIso?.getFullYear()).toBe(2026);
+    expect(parsedIso?.getMonth()).toBe(10); // November is 10
+    expect(parsedIso?.getDate()).toBe(14);
+
+    const parsedMonthName = parseExplicitDate('Coming over on November 14th');
+    expect(parsedMonthName).not.toBeNull();
+    expect(parsedMonthName?.getMonth()).toBe(10);
+    expect(parsedMonthName?.getDate()).toBe(14);
+
+    expect(parseExplicitDate('what is the weather today')).toBeNull();
   });
 });

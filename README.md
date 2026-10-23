@@ -101,14 +101,14 @@ flowchart TD
 
 | Module | Description | Key Interactions |
 | :--- | :--- | :--- |
-| **💬 Alexa+ Agent** | Conversational agent interface with Alexa pulse sphere, soundwave equalizer, scenario pills, and tool call inspection. | Interactive scenario buttons, speech output toggle, payload inspect drawer. |
-| **📊 Dashboard** | Executive household command center with circular readiness dial, next event countdown, and priority chore board. | Live readiness score gauge, quick-check task toggles, family member badges. |
-| **📅 Calendar** | Family schedule and visitor arrival blocks. | Filter by Visitor / Family / Routine / Errand, add custom events. |
-| **📋 Chores & Tasks** | Task management categorized by Guest Room, Cleaning, Groceries, Smart Home. | Assignee filtering (Vaibhav, Sarah, Shared), priority badges, direct task completion. |
-| **🛒 Shopping List** | Aisle-sorted grocery and amenity checklist synced via simulated Alexa Shopping List API. | Department filters (Produce, Bakery, Dairy, Pantry), check off purchased items. |
-| **🏡 Smart Routines** | Simulated Alexa Smart Home device fleet: Ecobee thermostat, Hue lights, Schlage deadbolt, Roborock vacuum. | Power toggles for scheduled routines, live device state telemetry. |
-| **⚡ Execution Trace** | Real-time audit log of all tool executions with latency in ms, status codes, and input/output JSON inspectors. | Search tool calls, copy JSON payloads, verify state mutations. |
-| **🔄 Demo Reset** | One-click button in the header restoring pristine seed state instantly. | State reset with notification and storage wipe. |
+| **💬 Assistant** | Restrained conversation interface with 3 prominent guided scenarios, clean message bubbles, collapsible simulated tool traces, and optional speech output. | One-click scenario launches, message speech synthesis, inline tool payload inspection. |
+| **📊 Dashboard** | Household command center with horizontal task preparation progress bar, next deadline card, pending shopping counters, and priority chore board. | Live preparation completion progress bar, direct task completion toggles, quick module navigation. |
+| **📅 Calendar** | Family schedule, visitor arrival blocks, and preparation windows. | Filter by Visitor / Family / Routine / Errand, validated event creation modal with start/end checks. |
+| **📋 Chores & Tasks** | Practical task management categorized by Guest Suite, Cleaning, Groceries, Smart Home. | Assignee filtering (Vaibhav, Sarah, Shared), status filters (Open, Done), priority badges, direct task completion. |
+| **🛒 Shopping List** | Department-sorted grocery and guest amenity checklist (Produce, Bakery, Dairy, Pantry, Amenities). | Aisle categorization, check off purchased items, validated add-item modal. |
+| **🏡 Smart Routines** | Simulated Alexa Smart Home integration orchestrating Ecobee thermostat, Philips Hue lights, simulated keypad pass, and Roborock vacuum. | Power toggles for scheduled routines, live device state telemetry derived directly from state. |
+| **⚡ Audit Trail** | Collapsible technical inspector with simulated latency, status codes, search, filter by tool family, and JSON copy with clipboard fallback. | Filter tools, copy payloads as JSON, verify state mutations. |
+| **🔄 Demo Reset** | Quick reset in the top header restoring clean initial seed state. | State reset with immediate interface synchronization and storage wipe. |
 
 ---
 
@@ -116,9 +116,9 @@ flowchart TD
 
 - **Framework:** React 19 + TypeScript
 - **Bundler & Dev Server:** Vite 8
-- **Styling:** Vanilla CSS with modern custom design tokens, glassmorphism, responsive grid, and Alexa ambient styling (no heavy UI frameworks)
-- **Icons:** Lucide React
-- **Testing:** Vitest automated unit testing suite
+- **Styling:** Vanilla CSS with restrained professional design tokens, warm neutral background (`#f8fafc`), white surfaces, dark slate typography, and ocean/slate blue accent (`#0284c7`). Fully responsive down to ~390px mobile viewports.
+- **Icons:** Lucide React (used deliberately and sparingly)
+- **Testing:** Vitest automated unit testing suite (25 tests)
 - **Linter:** Oxlint (zero errors, zero warnings)
 - **Voice Output:** Native browser Web Speech API (`SpeechSynthesis`)
 
@@ -146,7 +146,7 @@ npm run dev
 Open [http://localhost:5173/](http://localhost:5173/) in your web browser.
 
 ### Run Automated Tests
-Run the Vitest test suite covering intent classification, scenario tool dispatching, and state mutations:
+Run the Vitest test suite covering date boundaries, intent classification, scenario tool dispatching, and state mutations:
 ```bash
 npm test
 ```
@@ -167,8 +167,8 @@ npm run lint
 
 ## 🧪 Automated Test Suite
 
-HomeHandoff includes 22 automated unit and regression tests across 4 test suites:
-- **`src/test/agentEngine.test.ts`**:
+HomeHandoff includes 25 automated unit and regression tests across 4 test suites:
+- **`src/test/agentEngine.test.ts` (9 tests)**:
   - **Scenario 1:** Verifies autonomous execution of 4 tools (`calendar.createEvent`, `tasks.batchCreate`, `shopping.addItems`, `routines.scheduleSmartHomeRoutine`), ensuring created entities are committed to the state store.
   - **Scenario 2:** Verifies context retention, event shifting to Saturday 5:00 PM, task deadline recalibration, and routine trigger updating to Saturday 3:30 PM.
   - **Scenario 3:** Verifies dynamic readiness calculation (0% initial, 40% after marking tasks completed, accurate incomplete task enumeration).
@@ -176,11 +176,14 @@ HomeHandoff includes 22 automated unit and regression tests across 4 test suites
   - **Rescheduling Isolation:** Ensures rescheduling only touches the active plan while preserving completed task states, unrelated chores, calendar events, and smart routines.
   - **Missing Plan & Fallbacks:** Graceful responses without crashing when no plan is active or for unrelated queries.
   - **Rapid State Updates:** Validates state consistency during sequential operations and tool tracking.
-- **`src/test/dateUtils.test.ts`**:
+  - **Complete Pipeline:** Verifies end-to-end parents-visit → task completion → reschedule → readiness inspection.
+- **`src/test/dateUtils.test.ts` (9 tests)**:
   - Tests `getUpcomingDayOfWeek` for same-day future vs. past hour/minute boundaries, tomorrow vs. next week, and date formatting.
-- **`src/test/readiness.test.ts`**:
+  - Tests `getRescheduledDateForPlan` to ensure visit dates never skip an extra week.
+  - Tests `parseExplicitDate` for ISO and human-readable dates.
+- **`src/test/readiness.test.ts` (3 tests)**:
   - Tests single-source-of-truth `computePlanReadiness` metrics across active plan and global state.
-- **`src/test/storage.test.ts`**:
+- **`src/test/storage.test.ts` (4 tests)**:
   - Tests `validateAndSanitizeState` backward compatibility, corruption resilience, localStorage save/load, and demo reset.
 
 ---

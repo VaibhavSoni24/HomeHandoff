@@ -4,10 +4,10 @@ import {
   Thermometer, 
   Lightbulb, 
   Lock, 
-  Sparkles, 
   Power, 
   Clock, 
-  Wind
+  Wind,
+  Info
 } from 'lucide-react';
 import type { SmartRoutine } from '../types/household';
 
@@ -20,177 +20,168 @@ export const RoutinesModule: React.FC<RoutinesModuleProps> = ({
   routines,
   onToggleRoutine
 }) => {
+  const getDeviceIcon = (deviceType: string) => {
+    switch (deviceType) {
+      case 'thermostat':
+        return <Thermometer size={16} />;
+      case 'lighting':
+        return <Lightbulb size={16} />;
+      case 'lock':
+        return <Lock size={16} />;
+      case 'vacuum':
+        return <Wind size={16} />;
+      default:
+        return <Cpu size={16} />;
+    }
+  };
+
+  // Derive all connected devices dynamically from the simulated routines
+  const deviceMap = new Map<string, {
+    name: string;
+    type: string;
+    controllingRoutine: string;
+    targetDescription: string;
+    simulatedValue: string;
+    isArmed: boolean;
+  }>();
+
+  routines.forEach(routine => {
+    routine.actions.forEach(action => {
+      const key = `${action.deviceType}-${action.deviceName}`;
+      let simVal = '';
+      if (action.deviceType === 'thermostat') {
+        simVal = action.targetState.temperature ? `${action.targetState.temperature}°F Target` : 'Set to 71°F';
+      } else if (action.deviceType === 'lighting') {
+        simVal = action.targetState.scene ? `${action.targetState.scene} (${action.targetState.brightness || 65}%)` : 'Warm Welcome';
+      } else if (action.deviceType === 'lock') {
+        simVal = '[Simulated Keypad Demo — Nonfunctional Pass]';
+      } else if (action.deviceType === 'vacuum') {
+        simVal = 'Pre-Arrival Quiet Sweep';
+      } else {
+        simVal = 'Automated Action';
+      }
+
+      deviceMap.set(key, {
+        name: action.deviceName,
+        type: action.deviceType,
+        controllingRoutine: routine.name,
+        targetDescription: action.actionDescription,
+        simulatedValue: simVal,
+        isArmed: routine.enabled
+      });
+    });
+  });
+
+  const simulatedDevices = Array.from(deviceMap.values());
+
   return (
-    <div className="module-container glass-panel">
+    <div className="module-panel surface-card">
       {/* Header bar */}
-      <div className="module-header">
-        <div className="module-title-group">
-          <div className="module-icon-wrap purple">
-            <Cpu size={20} />
-          </div>
-          <div>
-            <h2 className="module-title">Alexa+ Smart Home Routines & Device Automation</h2>
-            <p className="module-subtitle">Simulated Alexa Smart Home Skills API orchestrating climate, lighting, and access controls</p>
-          </div>
+      <div className="module-header-row">
+        <div>
+          <h2 className="module-heading">Smart Home Routines (Simulated)</h2>
+          <p className="module-subheading">
+            Simulated Alexa Smart Home Skills API orchestrating thermostat, lighting, access controls, and robotic cleaning
+          </p>
         </div>
 
-        <div className="module-actions">
-          <span className="badge badge-purple">
-            <Sparkles size={11} /> Alexa+ Smart Home Engine
-          </span>
-        </div>
-      </div>
-
-      {/* Simulated Device Fleet Cards */}
-      <div className="device-fleet-section">
-        <h3 className="section-subheading">Connected Smart Home Fleet (Simulated)</h3>
-        <div className="device-cards-grid">
-          {/* Thermostat */}
-          <div className="device-status-card glass-panel-elevated">
-            <div className="device-card-header">
-              <div className="device-icon-wrap cyan">
-                <Thermometer size={18} />
-              </div>
-              <div className="device-info">
-                <span className="device-name">Ecobee Smart Thermostat</span>
-                <span className="device-room">Guest Suite & Main Floor</span>
-              </div>
-              <span className="device-status-pill online">Active</span>
-            </div>
-            <div className="device-main-reading">
-              <span className="reading-value">71°F</span>
-              <span className="reading-unit">Comfort Setpoint</span>
-            </div>
-            <div className="device-footer-state">
-              <span>Mode: <strong>Auto Cool/Heat</strong></span>
-              <span>Pre-conditioning: <strong>Armed</strong></span>
-            </div>
-          </div>
-
-          {/* Lighting */}
-          <div className="device-status-card glass-panel-elevated">
-            <div className="device-card-header">
-              <div className="device-icon-wrap amber">
-                <Lightbulb size={18} />
-              </div>
-              <div className="device-info">
-                <span className="device-name">Philips Hue Scenes</span>
-                <span className="device-room">Foyer, Porch & Guest Room</span>
-              </div>
-              <span className="device-status-pill online">Armed</span>
-            </div>
-            <div className="device-main-reading">
-              <span className="reading-value">Warm Welcome</span>
-              <span className="reading-unit">65% Warm Amber Glow</span>
-            </div>
-            <div className="device-footer-state">
-              <span>Trigger: <strong>Arrival Window</strong></span>
-              <span>Porch Light: <strong>Synced</strong></span>
-            </div>
-          </div>
-
-          {/* Smart Lock */}
-          <div className="device-status-card glass-panel-elevated">
-            <div className="device-card-header">
-              <div className="device-icon-wrap emerald">
-                <Lock size={18} />
-              </div>
-              <div className="device-info">
-                <span className="device-name">Schlage Smart Deadbolt</span>
-                <span className="device-room">Front Door Entryway</span>
-              </div>
-              <span className="device-status-pill online">Secure</span>
-            </div>
-            <div className="device-main-reading">
-              <span className="reading-value">PIN: 8492</span>
-              <span className="reading-unit">Temporary Guest Keypad Access</span>
-            </div>
-            <div className="device-footer-state">
-              <span>Auto-Lock: <strong>Enabled</strong></span>
-              <span>Weekend Pass: <strong>Active</strong></span>
-            </div>
-          </div>
-
-          {/* Robot Vacuum */}
-          <div className="device-status-card glass-panel-elevated">
-            <div className="device-card-header">
-              <div className="device-icon-wrap purple">
-                <Wind size={18} />
-              </div>
-              <div className="device-info">
-                <span className="device-name">Roborock S8 Pro Ultra</span>
-                <span className="device-room">Living Area & Guest Suite</span>
-              </div>
-              <span className="device-status-pill standby">Docked</span>
-            </div>
-            <div className="device-main-reading">
-              <span className="reading-value">Quiet Sweep</span>
-              <span className="reading-unit">Pre-Arrival Cleaning Run</span>
-            </div>
-            <div className="device-footer-state">
-              <span>Battery: <strong>100%</strong></span>
-              <span>Next Run: <strong>Automated</strong></span>
-            </div>
+        <div className="module-header-actions">
+          <div className="simulated-pill-notice" title="High-fidelity client simulation for hackathon judging">
+            <Info size={13} />
+            <span>Simulated Device Fleet</span>
           </div>
         </div>
       </div>
 
-      {/* Routines List */}
-      <div className="routines-list-section">
-        <h3 className="section-subheading">Coordinated Routines</h3>
-        <div className="routines-grid">
+      {/* Routines List Section */}
+      <div className="routines-block">
+        <h3 className="sub-block-title">Scheduled Automation Routines</h3>
+        <div className="routines-list-grid">
           {routines.map(routine => {
+            const isPlanRoutine = !!routine.planId;
             return (
               <div 
                 key={routine.id} 
-                className={`routine-card glass-panel-elevated ${routine.enabled ? 'routine-active' : 'routine-disabled'} ${routine.planId ? 'plan-routine-highlight' : ''}`}
+                className={`routine-card surface-card ${routine.enabled ? 'routine-enabled' : 'routine-disabled'}`}
               >
-                <div className="routine-card-top">
-                  <div className="routine-title-wrap">
+                <div className="routine-card-header">
+                  <div className="routine-header-info">
                     <div className="routine-title-row">
                       <h4 className="routine-name">{routine.name}</h4>
-                      {routine.planId && (
-                        <span className="badge badge-cyan">
-                          <Sparkles size={11} /> Plan Synced
-                        </span>
+                      {isPlanRoutine && (
+                        <span className="badge badge-accent">Plan Routine</span>
                       )}
                     </div>
-                    <div className="routine-trigger-row">
-                      <Clock size={13} className="text-secondary" />
+                    <div className="routine-trigger-line">
+                      <Clock size={13} />
                       <span>{routine.trigger}</span>
                     </div>
                   </div>
 
                   <button
-                    className={`routine-power-toggle ${routine.enabled ? 'enabled' : 'disabled'}`}
+                    type="button"
+                    className={`btn-routine-toggle ${routine.enabled ? 'active' : ''}`}
                     onClick={() => onToggleRoutine(routine.id)}
-                    title={routine.enabled ? 'Click to disable routine' : 'Click to enable routine'}
+                    aria-label={`Toggle routine ${routine.name}: currently ${routine.enabled ? 'armed' : 'idle'}`}
                   >
-                    <Power size={16} />
+                    <Power size={13} />
+                    <span>{routine.enabled ? 'Armed' : 'Disabled'}</span>
                   </button>
                 </div>
 
                 <div className="routine-actions-list">
-                  <span className="actions-header-label">Automated Actions ({routine.actions.length}):</span>
+                  <span className="actions-header-label">Configured Device Actions:</span>
                   {routine.actions.map((act, aIdx) => (
                     <div key={aIdx} className="routine-action-item">
-                      <span className="action-bullet-dot"></span>
-                      <div className="action-desc">
-                        <strong className="action-device-name">{act.deviceName}: </strong>
-                        <span>{act.actionDescription}</span>
+                      <span className="action-device-icon">{getDeviceIcon(act.deviceType)}</span>
+                      <div className="action-text-col">
+                        <strong className="action-device-name">{act.deviceName}:</strong>{' '}
+                        <span className="action-desc-body">{act.actionDescription}</span>
                       </div>
                     </div>
                   ))}
                 </div>
-
-                <div className="routine-footer">
-                  <span className="routine-status-label">
-                    Status: <strong>{routine.enabled ? 'Armed & Scheduled' : 'Paused'}</strong>
-                  </span>
-                </div>
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Derived Simulated Device Status Grid */}
+      <div className="routines-block">
+        <h3 className="sub-block-title">Simulated Connected Hardware Telemetry</h3>
+        <p className="sub-block-desc">
+          Telemetry is derived directly from active routine action targets in application state. 
+          No physical locks or external IoT accounts are contacted.
+        </p>
+
+        <div className="device-telemetry-grid">
+          {simulatedDevices.map((dev, idx) => (
+            <div key={idx} className="device-telemetry-card surface-card">
+              <div className="device-card-top">
+                <div className="device-title-box">
+                  <span className="device-type-icon">{getDeviceIcon(dev.type)}</span>
+                  <div>
+                    <h5 className="device-name">{dev.name}</h5>
+                    <span className="device-type-tag">{dev.type.toUpperCase()}</span>
+                  </div>
+                </div>
+                <span className={`device-state-pill ${dev.isArmed ? 'armed' : 'idle'}`}>
+                  {dev.isArmed ? 'Armed in Sandbox' : 'Idle'}
+                </span>
+              </div>
+
+              <div className="device-target-value">
+                <span className="target-value-text">{dev.simulatedValue}</span>
+              </div>
+
+              <div className="device-card-footer">
+                <span className="controlling-routine-label">
+                  Linked Routine: <strong>{dev.controllingRoutine}</strong>
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
