@@ -7,6 +7,7 @@ import {
   Volume2,
   Clock,
   CheckCircle2,
+  AlertCircle,
   Calendar,
   CheckSquare,
   ShoppingCart,
@@ -227,8 +228,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                                   <div className="tool-toggle-left">
                                     <span className="tool-type-icon">{getToolIcon(tool.toolName)}</span>
                                     <span className="tool-name-code">{tool.toolName}</span>
-                                    <span className="tool-status-pill success">
-                                      <CheckCircle2 size={11} />
+                                    <span className={`tool-status-pill ${tool.status}`}>
+                                      {tool.status === 'success' && <CheckCircle2 size={11} />}
+                                      {tool.status === 'failed' && <AlertCircle size={11} />}
+                                      {tool.status === 'executing' && <Clock size={11} />}
                                       {tool.status}
                                     </span>
                                   </div>
