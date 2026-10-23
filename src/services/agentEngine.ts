@@ -733,7 +733,7 @@ function handleScenario1ParentsVisit(state: HouseholdState): AgentExecutionResul
       {
         deviceType: 'lock',
         deviceName: 'Schlage Smart Door Lock',
-        actionDescription: 'Generate temporary simulated guest access pass [SIMULATED-CODE-NOT-ISSUED] (No physical lock contacted)',
+        actionDescription: 'Set simulated guest lock placeholder [SIMULATED-CODE-NOT-ISSUED] (No physical lock contacted; no usable passcode generated)',
         targetState: { guestPinActive: true, pinCode: 'SIMULATED-CODE-NOT-ISSUED', simulated: true }
       },
       {
@@ -749,7 +749,7 @@ function handleScenario1ParentsVisit(state: HouseholdState): AgentExecutionResul
     id: `tool-${Date.now()}-4`,
     timestamp: new Date().toISOString(),
     toolName: 'routines.scheduleSmartHomeRoutine',
-    description: `Scheduled Alexa+ Smart Home Routine: "Parents Arrival Welcome Routine" [SIMULATED-CODE-NOT-ISSUED]`,
+    description: `Scheduled Alexa+ Smart Home Routine: "Parents Arrival Welcome Routine" [SIMULATED-CODE-NOT-ISSUED] (simulated placeholder; no physical lock contacted)`,
     input: {
       routineName: newRoutine.name,
       trigger: newRoutine.trigger,
@@ -759,8 +759,8 @@ function handleScenario1ParentsVisit(state: HouseholdState): AgentExecutionResul
     output: {
       routineId: newRoutine.id,
       scheduledTime: routineTriggerTime.toISOString(),
-      service: 'Simulated Alexa Smart Home Skill API (client simulation — no physical lock contacted)',
-      simulatedAccessPass: 'SIMULATED-CODE-NOT-ISSUED',
+      service: 'Simulated Alexa Smart Home Skill API (client simulation — no physical lock contacted; no usable passcode generated)',
+      simulatedAccessPass: 'SIMULATED-CODE-NOT-ISSUED (simulated placeholder only)',
       status: 'armed',
       simulatedLatencyMs: 51
     },
@@ -802,9 +802,9 @@ Here is what I've done across your household systems:
 1. 📅 **Calendar:** Blocked off **Parents Weekend Visit** (Friday 6:00 PM – Sunday 3:00 PM).
 2. 📋 **Tasks:** Generated **5 preparation tasks** distributed between Sarah (bedroom cleaning & entryway tidy) and Vaibhav (bathroom restock, grocery run & smart setup).
 3. 🛒 **Shopping:** Added **5 guest favorites** (sourdough, organic milk, dark roast coffee, herbal tea, plush towels) to your shopping list.
-4. 🏡 **Alexa+ Smart Home Routine:** Armed **"Parents Arrival Welcome Routine"** for Friday at 4:30 PM to pre-condition the guest room to 71°F, turn on warm lighting, and arm simulated guest lock pass (SIMULATED-CODE-NOT-ISSUED; no physical lock contacted).
+4. 🏡 **Alexa+ Smart Home Routine:** Armed **"Parents Arrival Welcome Routine"** for Friday at 4:30 PM to pre-condition the guest room to 71°F, turn on warm lighting, and set simulated guest lock placeholder (SIMULATED-CODE-NOT-ISSUED; no physical lock contacted and no usable passcode generated).
 
-Everything is live on your dashboard and ready for tracking.`;
+All changes are reflected in the HomeHandoff demo dashboard and ready for tracking.`;
 
   const assistantMessage: ChatMessage = {
     id: `msg-asst-${Date.now()}`,
@@ -1080,7 +1080,7 @@ function handleScenario2RescheduleSaturday(state: HouseholdState, params: Record
     },
     output: {
       status: 'rescheduled',
-      deviceTarget: 'Thermostat 71°F, Hue Warm Welcome, Guest pass [SIMULATED-CODE-NOT-ISSUED] (no physical lock contacted)',
+      deviceTarget: 'Thermostat 71°F, Hue Warm Welcome, Guest lock placeholder [SIMULATED-CODE-NOT-ISSUED] (no physical lock contacted; no usable passcode generated)',
       simulatedLatencyMs: 34
     },
     status: 'success',

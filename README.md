@@ -16,11 +16,7 @@ When family visits or major household events occur, preparing a home requires ju
 
 **HomeHandoff** is an intelligent, context-aware household coordination agent built for the **Alexa+ web-experience route**. It transforms natural language instructions into coordinated multi-step action plans: blocking calendar arrival windows, delegating categorized tasks to family members with preparation buffers, stocking guest amenities into shopping lists, and automating smart home climate, lighting, and access controls.
 
-Unlike generic conversational chatbots that merely output blocks of decorative text, **HomeHandoff's tool calls actually mutate application state** across all modules with real-time execution traces and persistent browser state.
-
-<!-- Live Demo: When deployed to Vercel, Netlify, or AWS Amplify, insert your production URL here:
-Live Demo: [https://your-domain.vercel.app](https://your-domain.vercel.app)
--->
+Unlike generic conversational chatbots that merely output blocks of decorative text, **HomeHandoff's tool calls actually mutate application state** within the client-side browser demo across all modules with real-time execution traces and persistent browser state (without contacting external accounts or real cloud services).
 
 ---
 
@@ -30,11 +26,11 @@ Live Demo: [https://your-domain.vercel.app](https://your-domain.vercel.app)
 > **Hackathon Submission Route:**  
 > This project implements the officially permitted **simulated Alexa+ web-experience route** for the Amazon Developer Hackathon.
 > 
-> To ensure total transparency for judges, **none of the simulated integrations claim to be live Amazon cloud services** or require paid API credentials. Instead, HomeHandoff implements high-fidelity deterministic client simulation of Alexa APIs:
+> To ensure total transparency for judges, **all calendar, shopping, and smart-home effects are strictly simulated and update in-app client state**. No external Amazon or Google cloud services, personal accounts, or physical IoT devices are contacted. The described AVS, Alexa APIs, named devices (Ecobee, Philips Hue, Schlage, Roborock), and tool calls are deterministic client simulations within this web demo, not integrations with actual Amazon Alexa services or the named third-party hardware manufacturers:
 > 
-> 1. **Simulated Alexa Voice Service (AVS) & Agent:** Natural language intent classifier with multi-turn context memory, autonomous tool execution dispatching, and optional browser voice synthesis via the Web Speech API.
-> 2. **Simulated Alexa Smart Home Skills API:** Simulates connected device fleet states, including Ecobee smart thermostats (pre-conditioning guest rooms to 71°F), Philips Hue lighting scenes ("Warm Welcome"), Schlage smart deadbolts (simulated access action using placeholder `SIMULATED-CODE-NOT-ISSUED`; no physical lock is contacted and no usable passcode is generated), and Roborock robot vacuums.
-> 3. **Simulated Alexa Shopping List API:** Updates client-side shopping list state with guest food preferences and bath amenities organized by grocery store aisle (local client-side state mutation; no external Amazon cloud sync).
+> 1. **Simulated Alexa Voice Service (AVS) & Agent:** Natural language intent classifier with multi-turn context memory, autonomous tool execution dispatching, and optional browser voice synthesis via the Web Speech API (all client-side; no Amazon AVS cloud connection).
+> 2. **Simulated Alexa Smart Home Skills API:** Simulates device fleet states, including Ecobee smart thermostats (pre-conditioning guest rooms to 71°F), Philips Hue lighting scenes ("Warm Welcome"), Schlage smart deadbolts (simulated access action using placeholder `SIMULATED-CODE-NOT-ISSUED`; no physical lock is contacted and no usable passcode is generated), and Roborock robot vacuums.
+> 3. **Simulated Alexa Shopping List API:** Updates client-side shopping list state with guest food preferences and bath amenities organized by grocery store aisle (local client-side state mutation; no external Amazon cloud sync or retail cart).
 > 4. **Simulated Alexa Household Calendar:** Updates client-side calendar event state with arrival and departure windows and preparation buffers (local client-side state mutation; no external Google or Alexa calendar synchronization).
 
 ---
@@ -49,7 +45,7 @@ HomeHandoff includes interactive one-click scenario chips in the Alexa+ conversa
   - `calendar.createEvent`: Blocks "Parents Weekend Visit" (Friday 6:00 PM – Sunday 3:00 PM).
   - `tasks.batchCreate`: Generates 5 prioritized tasks with assigned family members (bedroom cleaning, bathroom restock, grocery run, entryway tidy, Wi-Fi card setup).
   - `shopping.addItems`: Adds 5 parent-favorite items (artisan sourdough, organic milk, dark roast coffee, chamomile tea, plush bath towels).
-  - `routines.scheduleSmartHomeRoutine`: Arms "Parents Arrival Welcome Routine" (pre-cools house to 71°F, sets warm porch lights, and arms simulated guest pass placeholder `SIMULATED-CODE-NOT-ISSUED`; no physical lock contacted).
+  - `routines.scheduleSmartHomeRoutine`: Arms "Parents Arrival Welcome Routine" (pre-cools house to 71°F, sets warm porch lights, and sets simulated guest lock placeholder `SIMULATED-CODE-NOT-ISSUED`; no physical lock contacted and no usable passcode generated).
 - **Result:** Generates an active plan, calculates preparation milestones, and sets initial readiness score.
 
 ### 2. Scenario 2: Dynamic Timeline & Buffer Rescheduling
@@ -106,7 +102,7 @@ flowchart TD
 | **📅 Calendar** | Family schedule, visitor arrival blocks, and preparation windows. | Filter by Visitor / Family / Routine / Errand, validated event creation modal with start/end checks. |
 | **📋 Chores & Tasks** | Practical task management categorized by Guest Suite, Cleaning, Groceries, Smart Home. | Assignee filtering (Vaibhav, Sarah, Shared), status filters (Open, Done), priority badges, direct task completion. |
 | **🛒 Shopping List** | Department-sorted grocery and guest amenity checklist (Produce, Bakery, Dairy, Pantry, Amenities). | Aisle categorization, check off purchased items, validated add-item modal. |
-| **🏡 Smart Routines** | Simulated Alexa Smart Home integration orchestrating Ecobee thermostat, Philips Hue lights, simulated keypad pass, and Roborock vacuum. | Power toggles for scheduled routines, live device state telemetry derived directly from state. |
+| **🏡 Smart Routines** | Simulated Alexa Smart Home integration orchestrating simulated Ecobee thermostat, Philips Hue lights, simulated lock placeholder, and Roborock vacuum. | Power toggles for scheduled routines, simulated device state telemetry derived directly from local state. |
 | **⚡ Audit Trail** | Collapsible technical inspector with simulated latency, status codes, search, filter by tool family, and JSON copy with clipboard fallback. | Filter tools, copy payloads as JSON, verify state mutations. |
 | **🔄 Demo Reset** | Quick reset in the top header restoring clean initial seed state. | State reset with immediate interface update and storage reset. |
 
@@ -118,7 +114,7 @@ flowchart TD
 - **Bundler & Dev Server:** Vite 8
 - **Styling:** Vanilla CSS with restrained professional design tokens, warm neutral background (`#f8fafc`), white surfaces, dark slate typography, and ocean/slate blue accent (`#0284c7`). Fully responsive down to ~390px mobile viewports.
 - **Icons:** Lucide React (used deliberately and sparingly)
-- **Testing:** Vitest automated unit testing suite (51 tests)
+- **Testing:** Vitest automated unit testing suite (54 tests)
 - **Linter:** Oxlint (zero errors, zero warnings)
 - **Voice Output:** Native browser Web Speech API (`SpeechSynthesis`)
 
@@ -167,7 +163,11 @@ npm run lint
 
 ## 🧪 Automated Test Suite
 
-HomeHandoff includes 51 automated unit and regression tests across 4 test suites:
+HomeHandoff includes 54 automated unit and regression tests across 5 test suites:
+- **`src/test/chatInterface.test.tsx` (3 tests)**:
+  - **Success Badge & Icon:** Verifies `tool-status-pill success` class and `CheckCircle2` icon for successful tool calls.
+  - **Failed Badge & Icon:** Verifies `tool-status-pill failed` class and `AlertCircle` icon for failed tool calls, ensuring no false success indicators.
+  - **Executing Badge & Icon:** Verifies `tool-status-pill executing` class and `Clock` icon for executing tool calls.
 - **`src/test/agentEngine.test.ts` (23 tests)**:
   - **Scenario 1:** Verifies autonomous execution of 4 tools (`calendar.createEvent`, `tasks.batchCreate`, `shopping.addItems`, `routines.scheduleSmartHomeRoutine`), ensuring created entities are committed to the state store.
   - **Scenario 2:** Verifies context retention, event shifting to Saturday 5:00 PM, task deadline recalibration, and routine trigger updating to Saturday 3:30 PM.
